@@ -210,8 +210,9 @@ class Trainer:
         dict_metrics = {}
 
         # Loop over samples
-        for step, (index, past, future, presents, angle_presents, videos, vehicles, number_vec, scene, scene_one_hot) \
-                in enumerate(tqdm.tqdm(loader)):
+        for step, (scene_one_hot, past, future) in enumerate(tqdm.tqdm(loader)):
+            past = past.float()
+            future = future.float()
             past = Variable(past)
             future = Variable(future)
             if self.config.cuda:
@@ -250,8 +251,7 @@ class Trainer:
         :return: loss
         """
         config = self.config
-        for step, (scene_one_hot, past, future) \
-                in enumerate(tqdm.tqdm(self.train_loader)):
+        for step, (scene_one_hot, past, future) in enumerate(tqdm.tqdm(self.train_loader)):
             self.iterations += 1
             scene_one_hot = scene_one_hot.permute(0,2,3,1).contiguous()
             past = past.float()
