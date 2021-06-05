@@ -260,11 +260,14 @@ class Trainer:
         eucl_mean = horizon10s = horizon20s = horizon30s = horizon40s = 0
         dict_metrics = {}
         val_it = iter(self.test_loader)
-
+        cnt = 0
 
         # Loop over samples
         for _ in tqdm.tqdm(self.train_loader):
             scene_one_hot, past, future, cnt_len = self.parse_data(val_it, self.test_loader, self.cfg)
+            cnt += cnt_len
+            if cnt > 8000:
+                break
 
             past = past.float()
             future = future.float()
@@ -292,11 +295,11 @@ class Trainer:
                                 train=False
                                 )
 
-        dict_metrics['eucl_mean'] = eucl_mean / len(loader.dataset)
-        dict_metrics['horizon10s'] = horizon10s / len(loader.dataset)
-        dict_metrics['horizon20s'] = horizon20s / len(loader.dataset)
-        dict_metrics['horizon30s'] = horizon30s / len(loader.dataset)
-        dict_metrics['horizon40s'] = horizon40s / len(loader.dataset)
+        dict_metrics['eucl_mean'] = eucl_mean / cnt
+        dict_metrics['horizon10s'] = horizon10s / cnt
+        dict_metrics['horizon20s'] = horizon20s / cnt
+        dict_metrics['horizon30s'] = horizon30s / cnt
+        dict_metrics['horizon40s'] = horizon40s /cnt
 
         return dict_metrics
 
