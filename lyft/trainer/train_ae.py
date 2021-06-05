@@ -22,7 +22,7 @@ class Trainer:
         The Trainer class handles the training procedure for training the autoencoder.
         :param config: configuration parameters (see train_ae.py)
         """
-
+        print("init trainer")
         # test folder creating
         self.name_test = str(datetime.datetime.now())[:13]
         self.folder_tensorboard = 'runs/runs-ae/'
