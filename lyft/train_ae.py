@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from lyft.data_loader import LyftDataset
 import argparse
-from lyft.trainer.train_ae import Trainer
+from lyft.trainer.train_ae_lyft import Trainer
 
 
 def parse_config():
