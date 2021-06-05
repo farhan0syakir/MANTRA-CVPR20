@@ -14,7 +14,9 @@ import dataset_invariance
 from torch.autograd import Variable
 import tqdm
 from lyft.data_loader import LyftDataset, load_data
-
+from l5kit.data import LocalDataManager, ChunkedDataset
+from l5kit.dataset import AgentDataset, EgoDataset
+from l5kit.rasterization import build_rasterizer
 
 class Trainer:
     def __init__(self, config):
@@ -40,17 +42,66 @@ class Trainer:
         #                                                   len_future=config.future_len,
         #                                                   train=True,
         #                                                   dim_clip=self.dim_clip)
-        train, test = load_data(config.dataset_file)
-        self.data_train = LyftDataset(train)
-        self.train_loader = DataLoader(self.data_train,
-                                       batch_size=config.batch_size,
-                                       num_workers=1
-                                       )
-        self.data_test = LyftDataset(test)
-        self.test_loader = DataLoader(self.data_test,
-                                       batch_size=config.batch_size,
-                                       num_workers=1
-                                       )
+        cfg = {
+            'raster_params':{
+                'raster_size': [360, 360],
+                'pixel_size': [1,1],
+                'ego_center': [0.25, 0.5],
+                'map_type': 'py_semantic',
+                'satellite_map_key': "aerial_map/aerial_map.png",
+                'semantic_map_key': "semantic_map/semantic_map.pb",
+                'dataset_meta_key': "meta.json",
+                'filter_agents_threshold':0.5,
+                'disable_traffic_light_faces': False,
+                'set_origin_to_bottom':True
+            },
+            'train_data_loader':{
+                'key': "scenes/sample.zarr",
+                'batch_size': 48,
+                'shuffle': True,
+                'num_workers': 0
+            },
+            'val_data_loader': {
+                'key': "scenes/sample.zarr",
+                'batch_size': 48,
+                'shuffle': True,
+                'num_workers': 0
+            },
+            'model_params':{
+                'history_num_frames': 19,
+                'history_step_size': 1,
+                'history_delta_time': 0.1,
+                'future_num_frames': 40,
+                'future_step_size': 1,
+                'future_delta_time': 0.1,
+                'render_ego_history': True,
+                'step_time': 0.1,
+                'lr':  0.00001
+            }
+        }
+        self.cfg  = cfg
+
+        os.environ["L5KIT_DATA_FOLDER"] = '../../input/data'
+        dm = LocalDataManager(None)
+
+        # ===== INIT DATASET
+        train_cfg = cfg["train_data_loader"]
+        rasterizer = build_rasterizer(cfg, dm)
+        train_zarr = ChunkedDataset(dm.require(train_cfg["key"])).open()
+        self.data_train = AgentDataset(cfg, train_zarr, rasterizer)
+        self.train_loader = DataLoader(self.data_train, shuffle=train_cfg["shuffle"], batch_size=train_cfg["batch_size"],
+                                      num_workers=train_cfg["num_workers"])
+        print(self.data_train)
+
+        val_cfg = cfg["val_data_loader"]
+        rasterizer = build_rasterizer(cfg, dm)
+        val_zarr = ChunkedDataset(dm.require(val_cfg["key"])).open()
+        self.data_test = AgentDataset(cfg, val_zarr, rasterizer)
+        self.test_loader = DataLoader(self.data_test, shuffle=val_cfg["shuffle"], batch_size=val_cfg["batch_size"],
+                                    num_workers=val_cfg["num_workers"])
+        print(self.data_test)
+
+
         # self.data_test = dataset_invariance.TrackDataset(tracks,
         #                                                  len_past=config.past_len,
         #                                                  len_future=config.future_len,
@@ -109,7 +160,7 @@ class Trainer:
         self.file.write('points of past track: {}'.format(self.config.past_len) + '\n')
         self.file.write('points of future track: {}'.format(self.config.future_len) + '\n')
         self.file.write('train size: {}'.format(len(self.data_train)) + '\n')
-        # self.file.write('test size: {}'.format(len(self.data_test)) + '\n')
+        self.file.write('test size: {}'.format(len(self.data_test)) + '\n')
         self.file.write('batch size: {}'.format(self.config.batch_size) + '\n')
         self.file.write('learning rate: {}'.format(self.config.learning_rate) + '\n')
         self.file.write('embedding dim: {}'.format(self.config.dim_embedding_key) + '\n')
@@ -208,9 +259,13 @@ class Trainer:
 
         eucl_mean = horizon10s = horizon20s = horizon30s = horizon40s = 0
         dict_metrics = {}
+        val_it = iter(self.test_loader)
+
 
         # Loop over samples
-        for step, (scene_one_hot, past, future) in enumerate(tqdm.tqdm(loader)):
+        for _ in tqdm.tqdm(self.train_loader):
+            scene_one_hot, past, future, cnt_len = self.parse_data(val_it, self.test_loader, self.cfg)
+
             past = past.float()
             future = future.float()
             past = Variable(past)
@@ -245,13 +300,41 @@ class Trainer:
 
         return dict_metrics
 
+    def parse_data(self, tr_it, train_dataloader, cfg):
+        try:
+            data = next(tr_it)
+        except StopIteration:
+            tr_it = iter(train_dataloader)
+            data = next(tr_it)
+
+        history_len = cfg['model_params']['history_num_frames'] + 1
+        future_len = cfg['model_params']['future_num_frames']
+        tmp = {}
+        target_avail_sum = torch.sum(data['target_availabilities'], 1)
+        history_avail_sum = torch.sum(data['history_availabilities'], 1)
+        idx = target_avail_sum.eq(future_len) & history_avail_sum.eq(history_len)
+        tmp['image'] = data['image'][idx]
+        tmp['image'] = tmp['image'][:, -3:, :, :]
+
+        scene_one_hot = tmp['image']
+        past = data['history_positions'][idx]
+        future = data['target_positions'][idx]
+        return scene_one_hot, past, future, len(past)
+
     def _train_single_epoch(self):
         """
         Training loop over the dataset for an epoch
         :return: loss
         """
         config = self.config
-        for step, (scene_one_hot, past, future) in enumerate(tqdm.tqdm(self.train_loader)):
+        tr_it = iter(self.train_loader)
+        cnt = 0
+        # for step, (scene_one_hot, past, future) in enumerate(tqdm.tqdm(self.train_loader)):
+        for _ in tqdm.tqdm(self.train_loader):
+            scene_one_hot, past, future, cnt_len = self.parse_data(tr_it, self.train_loader, self.cfg)
+            cnt += cnt_len
+            if cnt > 8000:
+                break
             self.iterations += 1
             scene_one_hot = scene_one_hot.permute(0,2,3,1).contiguous()
             past = past.float()
