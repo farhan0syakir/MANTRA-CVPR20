@@ -56,13 +56,13 @@ class Trainer:
                 'set_origin_to_bottom':True
             },
             'train_data_loader':{
-                'key': "scenes/sample.zarr",
+                'key': "scenes/train.zarr",
                 'batch_size': 48,
                 'shuffle': True,
                 'num_workers': 0
             },
             'val_data_loader': {
-                'key': "scenes/sample.zarr",
+                'key': "scenes/validate.zarr",
                 'batch_size': 48,
                 'shuffle': True,
                 'num_workers': 0
@@ -81,7 +81,7 @@ class Trainer:
         }
         self.cfg  = cfg
 
-        os.environ["L5KIT_DATA_FOLDER"] = '../../input/data'
+        os.environ["L5KIT_DATA_FOLDER"] = '../../data'
         dm = LocalDataManager(None)
 
         # ===== INIT DATASET
