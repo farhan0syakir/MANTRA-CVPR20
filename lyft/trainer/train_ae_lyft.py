@@ -285,15 +285,7 @@ class Trainer:
             horizon30s += torch.sum(distances[:, 29])
             horizon40s += torch.sum(distances[:, 39])
 
-            # Draw sample: the first of the batch
-            if loader == self.test_loader:
-                self.draw_track(past[0],
-                                future[0],
-                                pred[0],
-                                index_tracklet=step,
-                                num_epoch=epoch,
-                                train=False
-                                )
+
 
         dict_metrics['eucl_mean'] = eucl_mean / cnt
         dict_metrics['horizon10s'] = horizon10s / cnt
