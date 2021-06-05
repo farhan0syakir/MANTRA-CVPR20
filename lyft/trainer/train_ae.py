@@ -254,6 +254,9 @@ class Trainer:
                 in enumerate(tqdm.tqdm(self.train_loader)):
             self.iterations += 1
             scene_one_hot = scene_one_hot.permute(0,2,3,1).contiguous()
+            past = past.float()
+            future = future.float()
+
             # torch.Size([32, 360, 360, 4]) torch.Size([32, 20, 2]) torch.Size([32, 40, 2])
             past = Variable(past)
             future = Variable(future)
