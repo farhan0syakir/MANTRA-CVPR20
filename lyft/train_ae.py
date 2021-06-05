@@ -8,7 +8,8 @@ from lyft.data_loader import LyftDataset
 import argparse
 from lyft.trainer.train_ae import Trainer
 
-
+import sys
+sys.path.append('..')
 
 
 def parse_config():
