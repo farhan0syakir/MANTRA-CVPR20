@@ -21,6 +21,7 @@ def load_files(path, train_or_test):
             len_train += 1
 
     for i in range(len_train):
+        print(f"load {train_or_test}_{i}")
         with open(f'{path}/{train_or_test}_{i}.npy', 'rb') as f:
             file_data = np.load(f, allow_pickle=True).item()
 
