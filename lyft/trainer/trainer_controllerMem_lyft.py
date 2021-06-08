@@ -82,7 +82,7 @@ class Trainer():
         }
         self.cfg = cfg
 
-        os.environ["L5KIT_DATA_FOLDER"] = '../../input/data'
+        os.environ["L5KIT_DATA_FOLDER"] = '../../data'
         dm = LocalDataManager(None)
 
         # ===== INIT DATASET
