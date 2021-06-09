@@ -348,9 +348,17 @@ class Trainer():
         with torch.no_grad():
             dict_metrics = {}
             eucl_mean = ADE_1s = ADE_2s = ADE_3s = horizon10s = horizon20s = horizon30s = horizon40s = 0
+            val_it = iter(self.test_loader)
+            cnt = 0
 
-            for step, (index, past, future, presents, angle_presents, videos, vehicles, number_vec, scene,
-                       scene_one_hot) in enumerate(loader):
+            # Loop over samples
+            for _ in tqdm.tqdm(self.test_loader):
+                scene_one_hot, past, future, cnt_len = self.parse_data(val_it, self.test_loader, self.cfg)
+                cnt += cnt_len
+                if cnt > 2000:
+                    break
+                past = past.float()
+                future = future.float()
                 past = Variable(past)
                 future = Variable(future)
                 if self.config.cuda:

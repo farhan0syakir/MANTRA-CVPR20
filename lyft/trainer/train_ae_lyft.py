@@ -263,10 +263,10 @@ class Trainer:
         cnt = 0
 
         # Loop over samples
-        for _ in tqdm.tqdm(self.train_loader):
+        for _ in tqdm.tqdm(self.test_loader):
             scene_one_hot, past, future, cnt_len = self.parse_data(val_it, self.test_loader, self.cfg)
             cnt += cnt_len
-            if cnt > 8000:
+            if cnt > 2000:
                 break
 
             past = past.float()
