@@ -269,21 +269,21 @@ class Trainer():
         """
         self.file = open(self.folder_test + "results.txt", "w")
         self.file.write("TEST:" + '\n')
-        self.file.write("split test: " + str(self.data_test.ids_split_test) + '\n')
+        # self.file.write("split test: " + str(self.data_test.ids_split_test) + '\n')
         self.file.write("num_predictions:" + str(self.config.preds) + '\n')
         self.file.write("epoch: " + str(epoch) + '\n')
         self.file.write("TRAIN size: " + str(len(self.data_train)) + '\n')
         self.file.write("TEST size: " + str(len(self.data_test)) + '\n')
         self.file.write("memory size: " + str(len(self.mem_n2n.memory_past)) + '\n')
 
-        self.file.write("error 1s: " + str(dict_metrics_test['horizon10s'].item()) + '\n')
-        self.file.write("error 2s: " + str(dict_metrics_test['horizon20s'].item()) + '\n')
-        self.file.write("error 3s: " + str(dict_metrics_test['horizon30s'].item()) + '\n')
-        self.file.write("error 4s: " + str(dict_metrics_test['horizon40s'].item()) + '\n')
-        self.file.write("ADE 1s: " + str(dict_metrics_test['ADE_1s'].item()) + '\n')
-        self.file.write("ADE 2s: " + str(dict_metrics_test['ADE_2s'].item()) + '\n')
-        self.file.write("ADE 3s: " + str(dict_metrics_test['ADE_3s'].item()) + '\n')
-        self.file.write("ADE 4s: " + str(dict_metrics_test['eucl_mean'].item()) + '\n')
+        self.file.write("error 1s: " + str(dict_metrics_test['horizon10s']) + '\n')
+        self.file.write("error 2s: " + str(dict_metrics_test['horizon20s']) + '\n')
+        self.file.write("error 3s: " + str(dict_metrics_test['horizon30s']) + '\n')
+        self.file.write("error 4s: " + str(dict_metrics_test['horizon40s']) + '\n')
+        self.file.write("ADE 1s: " + str(dict_metrics_test['ADE_1s']) + '\n')
+        self.file.write("ADE 2s: " + str(dict_metrics_test['ADE_2s']) + '\n')
+        self.file.write("ADE 3s: " + str(dict_metrics_test['ADE_3s']) + '\n')
+        self.file.write("ADE 4s: " + str(dict_metrics_test['eucl_mean']) + '\n')
 
         self.file.close()
 
@@ -383,14 +383,14 @@ class Trainer():
                 horizon40s += torch.sum(min_distances[:, 39])
 
                 # save in tensorboard: one for each batch
-                vid = videos[0]
-                vec = vehicles[0]
-                num_vec = number_vec[0]
-                index_track = index[0].numpy()
-                angle = angle_presents[0].cpu()
-                if loader == self.test_loader:
-                    self.draw_track(past[0], future[0], scene[0], pred[0], angle, vid, vec + num_vec,
-                                    index_tracklet=index_track, num_epoch=epoch)
+                # vid = videos[0]
+                # vec = vehicles[0]
+                # num_vec = number_vec[0]
+                # index_track = index[0].numpy()
+                # angle = angle_presents[0].cpu()
+                # if loader == self.test_loader:
+                #     self.draw_track(past[0], future[0], scene[0], pred[0], angle, vid, vec + num_vec,
+                #                     index_tracklet=index_track, num_epoch=epoch)
 
             dict_metrics['eucl_mean'] = eucl_mean / len(loader.dataset)
             dict_metrics['ADE_1s'] = ADE_1s / len(loader.dataset)
