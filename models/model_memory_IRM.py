@@ -55,6 +55,17 @@ class model_memory_IRM(nn.Module):
             nn.ReLU(), nn.BatchNorm2d(16))
 
         self.RNN_scene = nn.GRU(16, self.dim_embedding_key, 1, batch_first=True)
+        # self.transformer = nn.TransformerEncoderLayer(d_model=16, nhead=8)
+
+        #stacked transformer
+
+        self.str_encs = nn.ModuleList(
+            [nn.TransformerEncoderLayer(d_model=16, nhead=8) for _ in range(12)])
+        # self.enc1 = TransformerEncoderLayer(d_model=66, nhead=6)
+        # self.enc2 = TransformerEncoderLayer(d_model=66, nhead=6)
+
+        self.str_decs = nn.ModuleList(
+            [nn.TransformerDecoderLayer(d_model=16, nhead=8) for _ in range(12)])
 
         # refinement fc layer
         self.fc_refine = nn.Linear(self.dim_embedding_key, self.future_len * 2)
@@ -149,6 +160,10 @@ class model_memory_IRM(nn.Module):
         info_total = torch.cat((state_past, info_future.unsqueeze(0)), 2)
         input_dec = info_total
         state_dec = zero_padding
+
+        # torch.Size([1, 160, 96]),torch.Size([1, 160, 96])
+        # print(input_dec.size(), state_dec.size())
+
         for i in range(self.future_len):
             output_decoder, state_dec = self.decoder(input_dec, state_dec)
             displacement_next = self.FC_output(output_decoder)
@@ -156,6 +171,9 @@ class model_memory_IRM(nn.Module):
             prediction = torch.cat((prediction, coords_next), 1)
             present = coords_next
             input_dec = zero_padding
+
+        # torch.Size([160, 40, 2])
+        # print(prediction.size())
 
         if scene is not None:
             # scene encoding
@@ -175,6 +193,17 @@ class model_memory_IRM(nn.Module):
                 output = output.squeeze(2).permute(0, 2, 1)
 
                 state_rnn = state_past
+                # torch.Size([160, 40, 16]) torch.Size([1, 160, 48])
+                # print(output.size(), state_rnn.size())
+                # 32, 5, 40, 2
+                # print(dim_batch, self.num_prediction, self.future_len, 2)
+                # output = self.transformer(output)
+                for transformer in self.str_encs:
+                    output = transformer.forward(output)
+
+                mem = output
+                for transformer in self.str_decs:
+                    output = transformer.forward(output, mem)
                 output_rnn, state_rnn = self.RNN_scene(output, state_rnn)
                 prediction_refine = self.fc_refine(state_rnn).view(-1, self.future_len, 2)
                 prediction = prediction + prediction_refine
