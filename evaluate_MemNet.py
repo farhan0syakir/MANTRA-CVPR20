@@ -142,8 +142,7 @@ class Validator():
         fig = plt.figure()
         plt.imshow(scene_track, cmap=cm)
         colors = pl.cm.Reds(np.linspace(1, 0.3, pred.shape[0]))
-
-        matRot_track = cv2.getRotationMatrix2D((0, 0), -angle, 1)
+        matRot_track = cv2.getRotationMatrix2D((0, 0), -angle.item(), 1)
         past = cv2.transform(past.cpu().numpy().reshape(-1, 1, 2), matRot_track).squeeze()
         future = cv2.transform(future.cpu().numpy().reshape(-1, 1, 2), matRot_track).squeeze()
         story_scene = past * 2 + self.dim_clip
