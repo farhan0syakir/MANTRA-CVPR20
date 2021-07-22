@@ -54,27 +54,27 @@ class model_memory_IRM(nn.Module):
             nn.Conv2d(8, 16, kernel_size=5, stride=1, padding=2),
             nn.ReLU(), nn.BatchNorm2d(16))
 
-        self.RNN_scene = nn.GRU(16, self.dim_embedding_key, 1, batch_first=True)
+        # self.RNN_scene = nn.GRU(16, self.dim_embedding_key, 1, batch_first=True)
         self.transformer = nn.TransformerEncoderLayer(d_model=16, nhead=8)
 
         # refinement fc layer
-        self.fc_refine = nn.Linear(self.dim_embedding_key, self.future_len * 2)
+        self.fc_refine = nn.Linear(16*40, self.future_len * 2)
 
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.kaiming_normal_(self.RNN_scene.weight_ih_l0)
-        nn.init.kaiming_normal_(self.RNN_scene.weight_hh_l0)
-        nn.init.kaiming_normal_(self.RNN_scene.weight_ih_l0)
-        nn.init.kaiming_normal_(self.RNN_scene.weight_hh_l0)
+        # nn.init.kaiming_normal_(self.RNN_scene.weight_ih_l0)
+        # nn.init.kaiming_normal_(self.RNN_scene.weight_hh_l0)
+        # nn.init.kaiming_normal_(self.RNN_scene.weight_ih_l0)
+        # nn.init.kaiming_normal_(self.RNN_scene.weight_hh_l0)
         nn.init.kaiming_normal_(self.convScene_1[0].weight)
         nn.init.kaiming_normal_(self.convScene_2[0].weight)
         nn.init.kaiming_normal_(self.fc_refine.weight)
 
-        nn.init.zeros_(self.RNN_scene.bias_ih_l0)
-        nn.init.zeros_(self.RNN_scene.bias_hh_l0)
-        nn.init.zeros_(self.RNN_scene.bias_ih_l0)
-        nn.init.zeros_(self.RNN_scene.bias_hh_l0)
+        # nn.init.zeros_(self.RNN_scene.bias_ih_l0)
+        # nn.init.zeros_(self.RNN_scene.bias_hh_l0)
+        # nn.init.zeros_(self.RNN_scene.bias_ih_l0)
+        # nn.init.zeros_(self.RNN_scene.bias_hh_l0)
         nn.init.zeros_(self.convScene_1[0].bias)
         nn.init.zeros_(self.convScene_2[0].bias)
         nn.init.zeros_(self.fc_refine.bias)
@@ -188,8 +188,9 @@ class model_memory_IRM(nn.Module):
                 # 32, 5, 40, 2
                 # print(dim_batch, self.num_prediction, self.future_len, 2)
                 output = self.transformer(output)
-                output_rnn, state_rnn = self.RNN_scene(output, state_rnn)
-                prediction_refine = self.fc_refine(state_rnn).view(-1, self.future_len, 2)
+                # output_rnn, state_rnn = self.RNN_scene(output, state_rnn)
+                output = output.view(160,-1)
+                prediction_refine = self.fc_refine(output).view(-1, self.future_len, 2)
                 prediction = prediction + prediction_refine
 
         prediction = prediction.view(dim_batch, self.num_prediction, self.future_len, 2)
@@ -255,9 +256,10 @@ class model_memory_IRM(nn.Module):
                 output = F.grid_sample(scene_2, indices, mode='nearest')
                 output = output.squeeze(2).permute(0, 2, 1)
 
-                state_rnn = state_past_repeat
-                output_rnn, state_rnn = self.RNN_scene(output, state_rnn)
-                prediction_refine = self.fc_refine(state_rnn).view(-1, self.future_len, 2)
+                output = self.transformer(output)
+                # output_rnn, state_rnn = self.RNN_scene(output, state_rnn)
+                output = output.view(160, -1)
+                prediction_refine = self.fc_refine(output).view(-1, self.future_len, 2)
                 prediction = prediction + prediction_refine
         prediction = prediction.view(dim_batch, num_prediction, self.future_len, 2)
 

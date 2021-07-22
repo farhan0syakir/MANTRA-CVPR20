@@ -145,8 +145,8 @@ class Trainer:
             param.requires_grad = True
         for param in self.mem_n2n.convScene_2.parameters():
             param.requires_grad = True
-        for param in self.mem_n2n.RNN_scene.parameters():
-            param.requires_grad = True
+        # for param in self.mem_n2n.RNN_scene.parameters():
+        #     param.requires_grad = True
         for param in self.mem_n2n.fc_refine.parameters():
             param.requires_grad = True
 
