@@ -189,7 +189,8 @@ class model_memory_IRM(nn.Module):
                 # print(dim_batch, self.num_prediction, self.future_len, 2)
                 output = self.transformer(output)
                 # output_rnn, state_rnn = self.RNN_scene(output, state_rnn)
-                output = output.view(160,-1)
+                output = output.view(dim_batch*5,-1)
+                # print(output.size())
                 prediction_refine = self.fc_refine(output).view(-1, self.future_len, 2)
                 prediction = prediction + prediction_refine
 
