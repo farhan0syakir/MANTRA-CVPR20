@@ -5,6 +5,41 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 
+class FullyConnectedDecoder(nn.Module):
+    def __init__(self, past_len, future_len, num_preds):
+        super(FullyConnectedDecoder, self).__init__()
+        self.num_preds = num_preds
+        self.future_len = future_len
+        self.input_len = 2 * past_len + 2 * num_preds * future_len +  future_len * 16 * num_preds
+        self.fc = nn.Sequential(
+            nn.Linear(self.input_len, out_features=512),
+            nn.ReLU(inplace=False)
+        )
+        self.logit = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(512, out_features = future_len * num_preds * 2),
+            nn.ReLU(inplace=False)
+        )
+    def forward(self, past, future, map):
+        bs = past.size(0)
+        past = torch.flatten(past, 1)
+        future = torch.flatten(future.view(bs, -1 ), 1)
+        map = torch.flatten(map, 1)
+        map = map.view(bs, -1)
+
+        x = torch.cat((past, future, map), 1)
+        # exit()
+        x = self.fc(x)
+        x = self.logit(x)
+        bs, _ = x.shape
+        pred = x.view(bs, self.num_preds, self.future_len, 2)
+        return pred
+
+
+class LSTMDecoder(nn.Module):
+    #todo
+    pass
+
 class model_memory_IRM(nn.Module):
     """
     Memory Network model with Iterative Refinement Module.
@@ -54,29 +89,29 @@ class model_memory_IRM(nn.Module):
             nn.Conv2d(8, 16, kernel_size=5, stride=1, padding=2),
             nn.ReLU(), nn.BatchNorm2d(16))
 
-        self.RNN_scene = nn.GRU(16, self.dim_embedding_key, 1, batch_first=True)
+        # self.RNN_scene = nn.GRU(16, self.dim_embedding_key, 1, batch_first=True)
 
         # refinement fc layer
-        self.fc_refine = nn.Linear(self.dim_embedding_key, self.future_len * 2)
-
+        # self.fc_refine = nn.Linear(self.dim_embedding_key, self.future_len * 2)
+        self.fc_decoder = FullyConnectedDecoder(self.past_len, self.future_len,self.num_prediction)
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.kaiming_normal_(self.RNN_scene.weight_ih_l0)
-        nn.init.kaiming_normal_(self.RNN_scene.weight_hh_l0)
-        nn.init.kaiming_normal_(self.RNN_scene.weight_ih_l0)
-        nn.init.kaiming_normal_(self.RNN_scene.weight_hh_l0)
+        # nn.init.kaiming_normal_(self.RNN_scene.weight_ih_l0)
+        # nn.init.kaiming_normal_(self.RNN_scene.weight_hh_l0)
+        # nn.init.kaiming_normal_(self.RNN_scene.weight_ih_l0)
+        # nn.init.kaiming_normal_(self.RNN_scene.weight_hh_l0)
         nn.init.kaiming_normal_(self.convScene_1[0].weight)
         nn.init.kaiming_normal_(self.convScene_2[0].weight)
-        nn.init.kaiming_normal_(self.fc_refine.weight)
+        # nn.init.kaiming_normal_(self.fc_refine.weight)
 
-        nn.init.zeros_(self.RNN_scene.bias_ih_l0)
-        nn.init.zeros_(self.RNN_scene.bias_hh_l0)
-        nn.init.zeros_(self.RNN_scene.bias_ih_l0)
-        nn.init.zeros_(self.RNN_scene.bias_hh_l0)
+        # nn.init.zeros_(self.RNN_scene.bias_ih_l0)
+        # nn.init.zeros_(self.RNN_scene.bias_hh_l0)
+        # nn.init.zeros_(self.RNN_scene.bias_ih_l0)
+        # nn.init.zeros_(self.RNN_scene.bias_hh_l0)
         nn.init.zeros_(self.convScene_1[0].bias)
         nn.init.zeros_(self.convScene_2[0].bias)
-        nn.init.zeros_(self.fc_refine.bias)
+        # nn.init.zeros_(self.fc_refine.bias)
 
     def init_memory(self, data_train):
         """
@@ -146,6 +181,8 @@ class model_memory_IRM(nn.Module):
         ind = self.index_max.flatten()
 
         info_future = self.memory_fut[ind]
+        # print(info_future.size())
+        # exit()
         info_total = torch.cat((state_past, info_future.unsqueeze(0)), 2)
         input_dec = info_total
         state_dec = zero_padding
@@ -156,12 +193,32 @@ class model_memory_IRM(nn.Module):
             prediction = torch.cat((prediction, coords_next), 1)
             present = coords_next
             input_dec = zero_padding
-
         if scene is not None:
             # scene encoding
             scene = scene.permute(0, 3, 1, 2)
             scene_1 = self.convScene_1(scene)
             scene_2 = self.convScene_2(scene_1)
+            scene_2 = scene_2.repeat_interleave(self.num_prediction, dim=0)
+            pred_map = prediction + 90
+            pred_map = pred_map.unsqueeze(2)
+            indices = pred_map.permute(0, 2, 1, 3)
+            # rescale between -1 and 1
+            indices = 2 * (indices / 180) - 1
+            output = F.grid_sample(scene_2, indices, mode='nearest')
+            output = output.squeeze(2).permute(0, 2, 1)
+            # print(past.size(), prediction.size(), output.size())
+            # exit()
+            prediction = self.fc_decoder(past, prediction, output )
+
+        '''
+        # print(scene.size())
+        if scene is not None:
+            # scene encoding
+            scene = scene.permute(0, 3, 1, 2)
+            scene_1 = self.convScene_1(scene)
+            scene_2 = self.convScene_2(scene_1)
+            # print(scene_2.size())
+            # exit()
             scene_2 = scene_2.repeat_interleave(self.num_prediction, dim=0)
 
             # Iteratively refine predictions using context
@@ -178,7 +235,7 @@ class model_memory_IRM(nn.Module):
                 output_rnn, state_rnn = self.RNN_scene(output, state_rnn)
                 prediction_refine = self.fc_refine(state_rnn).view(-1, self.future_len, 2)
                 prediction = prediction + prediction_refine
-
+        '''
         prediction = prediction.view(dim_batch, self.num_prediction, self.future_len, 2)
         return prediction
 
