@@ -237,6 +237,11 @@ class Trainer:
 
         return dict_metrics
 
+    def generate_square_subsequent_mask(self,sz):
+        mask = (torch.triu(torch.ones((sz, sz))) == 1).transpose(0, 1)
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        return mask
+
     def _train_single_epoch(self):
         """
         Training loop over the dataset for an epoch
@@ -254,7 +259,11 @@ class Trainer:
             self.opt.zero_grad()
 
             # Get prediction and compute loss
-            output = self.mem_n2n(past, future)
+            src_seq_len = past.shape[1] + future.shape[1]
+            src_att = torch.zeros((src_seq_len, src_seq_len)).type(torch.bool).cuda()
+            trg_att = self.generate_square_subsequent_mask(future.shape[1]).cuda()
+            output = self.mem_n2n(past, future, src_att, trg_att)
+            # output = self.mem_n2n(past, future)
             loss = self.criterionLoss(output, future)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.mem_n2n.parameters(), 1.0, norm_type=2)
