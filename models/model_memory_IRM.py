@@ -93,7 +93,8 @@ class model_memory_IRM(nn.Module):
 
         # refinement fc layer
         # self.fc_refine = nn.Linear(self.dim_embedding_key, self.future_len * 2)
-        self.fc_decoder = FullyConnectedDecoder(self.past_len, self.future_len,self.num_prediction)
+        # self.fc_decoder = FullyConnectedDecoder(self.past_len, self.future_len,self.num_prediction)
+        self.final_decoder = LSTMDecoder(settings)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -205,13 +206,13 @@ class model_memory_IRM(nn.Module):
             # rescale between -1 and 1
             indices = 2 * (indices / 180) - 1
             output = F.grid_sample(scene_2, indices, mode='nearest')
-            output = output.squeeze(2).permute(0, 2, 1)
-            # print(past.size(), prediction.size(), output.size())
+            map_with_fut = output.squeeze(2).permute(0, 2, 1)
+            # print(past.size(), prediction.size(), output.size()) #torch.Size([32, 2, 20]) torch.Size([160, 40, 2]) torch.Size([160, 40, 16])
             # exit()
-            prediction = self.fc_decoder(past, prediction, output )
+            prediction = self.final_decoder(past, map_with_fut)
 
         '''
-        # print(scene.size())
+        # print(scene.size())f
         if scene is not None:
             # scene encoding
             scene = scene.permute(0, 3, 1, 2)
@@ -236,7 +237,7 @@ class model_memory_IRM(nn.Module):
                 prediction_refine = self.fc_refine(state_rnn).view(-1, self.future_len, 2)
                 prediction = prediction + prediction_refine
         '''
-        prediction = prediction.view(dim_batch, self.num_prediction, self.future_len, 2)
+        # prediction = prediction.view(dim_batch, self.num_prediction, self.future_len, 2)
         return prediction
 
     def write_in_memory(self, past, future, scene=None):
@@ -337,3 +338,51 @@ class model_memory_IRM(nn.Module):
         # future = torch.transpose(future, 1, 2)
         # future_track_to_write = future[index_writing]
         # self.memory_count = torch.cat((self.memory_count, future_track_to_write), 0)
+
+
+class LSTMDecoder(nn.Module):
+    def __init__(self, settings):
+        super(LSTMDecoder, self).__init__()
+        self.use_cuda = settings["use_cuda"]
+        self.dim_embedding_key = int(3240/2)
+        self.num_prediction = settings["num_prediction"]
+        self.past_len = settings["past_len"]
+        self.future_len = settings["future_len"]
+        self.decoder = nn.GRU(self.dim_embedding_key * 2, self.dim_embedding_key * 2, 1, batch_first=False)
+        self.FC_output = torch.nn.Linear(self.dim_embedding_key * 2, 2 * self.num_prediction)
+
+    def forward(self, past, map):
+        dim_batch = past.size()[0]
+        present = past[:, -1, :2].unsqueeze(1).repeat_interleave(self.num_prediction, dim=2)
+        past = torch.flatten(past, 1)
+        # future = torch.flatten(future.view(dim_batch, -1), 1)
+        map = torch.flatten(map, 1)
+        map = map.view(dim_batch, -1)
+
+        # x = torch.cat((past, future, map), 1)
+        # print(x.size())
+        # exit()
+
+        zero_padding = torch.zeros(1, dim_batch, self.dim_embedding_key * 2)
+        prediction = torch.Tensor()
+
+        if self.use_cuda:
+            zero_padding = zero_padding.cuda()
+            prediction = prediction.cuda()
+
+        state_conc = torch.cat((past, map), 1).unsqueeze(0)
+        # print(state_conc.size())
+        # exit()
+        input_fut = state_conc
+        state_fut = zero_padding
+
+        for i in range(self.future_len):
+            output_decoder, state_fut = self.decoder(input_fut, state_fut)
+            displacement_next = self.FC_output(output_decoder)
+            coords_next = present + displacement_next.squeeze(0).unsqueeze(1)
+            prediction = torch.cat((prediction, coords_next), 1)
+            present = coords_next
+            input_fut = zero_padding
+        prediction = prediction.view(dim_batch, self.num_prediction, self.future_len, 2)
+        return prediction
+
