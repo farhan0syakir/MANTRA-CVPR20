@@ -27,10 +27,12 @@ class model_encdec(nn.Module):
         self.d_model = d_model = 512
         dropout = 0.1
 
-        self.srcEmbed = nn.Sequential(LinearEmbedding(channel_in,d_model), PositionalEncoding(d_model, dropout))
-        self.tgtEmbed = nn.Sequential(LinearEmbedding(channel_in,d_model), PositionalEncoding(d_model, dropout))
+        self.past_embed = nn.Sequential(LinearEmbedding(channel_in,d_model), PositionalEncoding(d_model, dropout))
+        self.future_embed = nn.Sequential(LinearEmbedding(channel_in,d_model), PositionalEncoding(d_model, dropout))
 
-        self.transformer_model = nn.Transformer(d_model=self.d_model, nhead=16, num_encoder_layers=12)
+        self.past_encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=d_model, nhead=8), num_layers=6)
+        self.future_encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=d_model, nhead=8), num_layers=6)
+        self.future_decoder = nn.TransformerDecoder(nn.TransformerDecoderLayer(d_model=d_model, nhead=8), num_layers=6)
         self.FC_output = torch.nn.Linear(d_model, 2)
 
         # activation function
@@ -61,23 +63,31 @@ class model_encdec(nn.Module):
         nn.init.zeros_(self.FC_output.bias)
         raise
 
-    def forward(self, past, future, src_mask, tgt_mask):
+    def forward(self, past, future):
         """
         Forward pass that encodes past and future and decodes the future.
         :param past: past trajectory
         :param future: future trajectory
         :return: decoded future
         """
-        src = torch.cat((past, future), 1)
-        src = self.srcEmbed(src)
-        src = src.permute(1,0,2)
+        past_embeded = self.past_embed(past)
+        past_embeded = self.past_encoder(past_embeded)
 
-        tgt = future
-        tgt = self.tgtEmbed(tgt)
-        tgt = tgt.permute(1,0,2)
-        # print(src.size(), tgt.size(), src_mask.size(),tgt_mask.size())
+        future_embeded = self.future_embed(future)
+        future_embeded = self.future_encoder(future_embeded)
+
+        #print(past.size(),future.size()) #torch.Size([32, 20, 512]) torch.Size([32, 40, 512])
+        memory = torch.cat((past_embeded, future_embeded), 1)
+        memory = memory.permute(1, 0, 2)
+
+        tgt = future_embeded
+        tgt = tgt.permute(1, 0, 2)
+
+
+        # print(tgt.size(), memory.size())
+        # torch.Size([60, 32, 512]) torch.Size([40, 32, 512]) torch.Size([60, 60]) torch.Size([40, 40])
         # raise
-        output = self.transformer_model(src, tgt, src_mask, tgt_mask)
+        output = self.future_decoder(tgt, memory)
         output = output.permute(1, 0, 2)
         return self.FC_output(output)
 

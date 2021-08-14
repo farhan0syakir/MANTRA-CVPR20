@@ -211,10 +211,7 @@ class Trainer:
                 past = past.cuda()
                 future = future.cuda()
 
-            src_seq_len = past.shape[1] + future.shape[1]
-            src_att = torch.zeros((src_seq_len, src_seq_len)).type(torch.bool).cuda()
-            trg_att = self.generate_square_subsequent_mask(future.shape[1]).cuda()
-            pred = self.mem_n2n(past, future, src_att, trg_att).data
+            pred = self.mem_n2n(past, future).data
 
             distances = torch.norm(pred - future, dim=2)
             eucl_mean += torch.sum(torch.mean(distances, 1))
@@ -264,9 +261,7 @@ class Trainer:
 
             # Get prediction and compute loss
             src_seq_len = past.shape[1] + future.shape[1]
-            src_att = torch.zeros((src_seq_len, src_seq_len)).type(torch.bool).cuda()
-            trg_att = self.generate_square_subsequent_mask(future.shape[1]).cuda()
-            output = self.mem_n2n(past, future, src_att, trg_att)
+            output = self.mem_n2n(past, future)
             # output = self.mem_n2n(past, future)
             loss = self.criterionLoss(output, future)
             loss.backward()
