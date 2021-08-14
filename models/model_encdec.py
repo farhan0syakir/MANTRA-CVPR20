@@ -77,8 +77,8 @@ class model_encdec(nn.Module):
         future_embeded = self.future_encoder(future_embeded)
 
         #print(past.size(),future.size()) #torch.Size([32, 20, 512]) torch.Size([32, 40, 512])
-        memory = torch.cat((past_embeded, future_embeded), 1)
-        memory = memory.permute(1, 0, 2)
+        tmp = torch.cat((past_embeded, future_embeded), 1)
+        tmp = tmp.permute(1, 0, 2)
 
         tgt = future_embeded
         tgt = tgt.permute(1, 0, 2)
@@ -87,7 +87,7 @@ class model_encdec(nn.Module):
         # print(tgt.size(), memory.size())
         # torch.Size([60, 32, 512]) torch.Size([40, 32, 512]) torch.Size([60, 60]) torch.Size([40, 40])
         # raise
-        output = self.future_decoder(tgt, memory)
+        output = self.future_decoder(tgt, tmp)
         output = output.permute(1, 0, 2)
         return self.FC_output(output)
 

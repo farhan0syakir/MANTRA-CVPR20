@@ -121,15 +121,15 @@ class Trainer():
         config = self.config
 
         # freeze autoencoder layers
-        for param in self.mem_n2n.conv_past.parameters():
+        for param in self.mem_n2n.past_embed.parameters():
             param.requires_grad = False
-        for param in self.mem_n2n.conv_fut.parameters():
+        for param in self.mem_n2n.future_embed.parameters():
             param.requires_grad = False
-        for param in self.mem_n2n.encoder_past.parameters():
+        for param in self.mem_n2n.past_encoder.parameters():
             param.requires_grad = False
-        for param in self.mem_n2n.encoder_fut.parameters():
+        for param in self.mem_n2n.future_encoder.parameters():
             param.requires_grad = False
-        for param in self.mem_n2n.decoder.parameters():
+        for param in self.mem_n2n.future_decoder.parameters():
             param.requires_grad = False
         for param in self.mem_n2n.FC_output.parameters():
             param.requires_grad = False

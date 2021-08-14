@@ -32,12 +32,12 @@ class model_controllerMem(nn.Module):
         self.memory_count = []
 
         # layers
-        self.conv_past = model_pretrained.conv_past
-        self.conv_fut = model_pretrained.conv_fut
+        self.past_embed = model_pretrained.past_embed
+        self.future_embed = model_pretrained.future_embed
 
-        self.encoder_past = model_pretrained.encoder_past
-        self.encoder_fut = model_pretrained.encoder_fut
-        self.decoder = model_pretrained.decoder
+        self.past_encoder = model_pretrained.past_encoder
+        self.future_encoder = model_pretrained.future_encoder
+        self.future_decoder = model_pretrained.future_decoder
         self.FC_output = model_pretrained.FC_output
 
         # activation functions
@@ -65,16 +65,12 @@ class model_controllerMem(nn.Module):
             future = future.cuda()
 
             # past encoding
-            past = torch.transpose(past, 1, 2)
-            story_embed = self.relu(self.conv_past(past))
-            story_embed = torch.transpose(story_embed, 1, 2)
-            output_past, state_past = self.encoder_past(story_embed)
+            story_embed = self.past_embed(past)
+            state_past = self.past_encoder(story_embed).unsqueeze(0)
 
             # future encoding
-            future = torch.transpose(future, 1, 2)
-            future_embed = self.relu(self.conv_fut(future))
-            future_embed = torch.transpose(future_embed, 1, 2)
-            output_fut, state_fut = self.encoder_fut(future_embed)
+            future_embed = self.future_embed(future)
+            state_fut = self.future_encoder(future_embed).unsqueeze(0)
 
             # insert in memory
             self.memory_past = torch.cat((self.memory_past, state_past.squeeze(0)), 0)
@@ -90,18 +86,12 @@ class model_controllerMem(nn.Module):
         mem_past_i = self.memory_past[index]
         mem_fut_i = self.memory_fut[index]
         zero_padding = torch.zeros(1, 1, 96).cuda()
-        present = torch.zeros(1, 2).cuda()
-        prediction_single = torch.Tensor().cuda()
         info_total = torch.cat((mem_past_i, mem_fut_i), 0)
-        input_dec = info_total.unsqueeze(0).unsqueeze(0)
         state_dec = zero_padding
-        for i in range(self.future_len):
-            output_decoder, state_dec = self.decoder(input_dec, state_dec)
-            displacement_next = self.FC_output(output_decoder)
-            coords_next = present + displacement_next.squeeze(0).unsqueeze(1)
-            prediction_single = torch.cat((prediction_single, coords_next), 1)
-            present = coords_next
-            input_dec = zero_padding
+        output = self.future_decoder(info_total, state_dec)
+        output = output.permute(1, 0, 2)
+        prediction_single = self.FC_output(output)
+
         return prediction_single
 
     def forward(self, past, future=None):
@@ -123,32 +113,32 @@ class model_controllerMem(nn.Module):
             prediction = prediction.cuda()
 
         # past temporal encoding
-        past = torch.transpose(past, 1, 2)
-        story_embed = self.relu(self.conv_past(past))
-        story_embed = torch.transpose(story_embed, 1, 2)
-        output_past, state_past = self.encoder_past(story_embed)
+        story_embed = self.past_embed(past)
+        state_past = self.past_encoder(story_embed)
 
         # Cosine similarity and memory read
         past_normalized = F.normalize(self.memory_past, p=2, dim=1)
         state_normalized = F.normalize(state_past.squeeze(), p=2, dim=1)
+        past_normalized = torch.flatten(past_normalized,1)
+        state_normalized = torch.flatten(state_normalized,1)
+        # print(past_normalized.size(), state_normalized.size())
+        #[6, 20* 512], [32, 20* 512]
         self.weight_read = torch.matmul(past_normalized, state_normalized.transpose(0, 1)).transpose(0, 1)
         self.index_max = torch.sort(self.weight_read, descending=True)[1].cpu()
 
         for i_track in range(self.num_prediction):
-            present = present_temp
-            prediction_single = torch.Tensor().cuda()
             ind = self.index_max[:, i_track]
             info_future = self.memory_fut[ind]
-            info_total = torch.cat((state_past, info_future.unsqueeze(0)), 2)
-            input_dec = info_total
-            state_dec = zero_padding
-            for i in range(self.future_len):
-                output_decoder, state_dec = self.decoder(input_dec, state_dec)
-                displacement_next = self.FC_output(output_decoder)
-                coords_next = present + displacement_next.squeeze(0).unsqueeze(1)
-                prediction_single = torch.cat((prediction_single, coords_next), 1)
-                present = coords_next
-                input_dec = zero_padding
+            info_total = torch.cat((state_past, info_future), 1)
+
+            info_future = info_future.permute(1, 0, 2)
+            info_total = info_total.permute(1, 0, 2)
+            # print('info: ',info_future.size(),info_total.size())
+            output = self.future_decoder(info_future, info_total)
+            output = output.permute(1, 0, 2)
+            # print('output ', output.size())
+            prediction_single = self.FC_output(output)
+            # print('ps ', prediction_single.size())
             prediction = torch.cat((prediction, prediction_single.unsqueeze(1)), 1)
 
         if future is not None:
@@ -166,10 +156,8 @@ class model_controllerMem(nn.Module):
             writing_prob = torch.sigmoid(self.linear_controller(tolerance_rate))
 
             # future encoding
-            future = torch.transpose(future, 1, 2)
-            future_embed = self.relu(self.conv_fut(future))
-            future_embed = torch.transpose(future_embed, 1, 2)
-            output_fut, state_fut = self.encoder_fut(future_embed)
+            future_embed = self.future_embed(future)
+            state_fut = self.future_encoder(future_embed).unsqueeze(0)
 
             index_writing = np.where(writing_prob.cpu() > 0.5)[0]
             past_to_write = state_past.squeeze()[index_writing]
@@ -202,31 +190,25 @@ class model_controllerMem(nn.Module):
 
         # past temporal encoding
         past = torch.transpose(past, 1, 2)
-        story_embed = self.relu(self.conv_past(past))
-        story_embed = torch.transpose(story_embed, 1, 2)
-        output_past, state_past = self.encoder_past(story_embed)
+        # story_embed = self.relu(self.conv_past(past))
+        # story_embed = torch.transpose(story_embed, 1, 2)
+        state_past = self.encoder_past(past)
 
         # Cosine similarity and memory read
         past_normalized = F.normalize(self.memory_past, p=2, dim=1)
-        state_normalized = F.normalize(state_past.squeeze(), p=2, dim=1)
-        weight_read = torch.matmul(past_normalized, state_normalized.transpose(0, 1)).transpose(0, 1)
+        # state_normalized = F.normalize(state_past.squeeze(), p=2, dim=1)
+        weight_read = torch.matmul(past_normalized).transpose(0, 1)
         index_max = torch.sort(weight_read, descending=True)[1].cpu()[:, :num_prediction]
 
         for i_track in range(num_prediction):
-            present = present_temp
             prediction_single = torch.Tensor().cuda()
             ind = index_max[:, i_track]
             info_future = self.memory_fut[ind]
             info_total = torch.cat((state_past, info_future.unsqueeze(0)), 2)
-            input_dec = info_total
-            state_dec = zero_padding
-            for i in range(self.future_len):
-                output_decoder, state_dec = self.decoder(input_dec, state_dec)
-                displacement_next = self.FC_output(output_decoder)
-                coords_next = present + displacement_next.squeeze(0).unsqueeze(1)
-                prediction_single = torch.cat((prediction_single, coords_next), 1)
-                present = coords_next
-                input_dec = zero_padding
+            output = self.future_decoder(info_total, state_past)
+            output = output.permute(1, 0, 2)
+            prediction = self.FC_output(output)
+
             prediction = torch.cat((prediction, prediction_single.unsqueeze(1)), 1)
 
         future_rep = future.unsqueeze(1).repeat(1, num_prediction, 1, 1)
