@@ -85,14 +85,15 @@ class model_controllerMem(nn.Module):
 
         mem_past_i = self.memory_past[index]
         mem_fut_i = self.memory_fut[index]
-        zero_padding = torch.zeros(1, 1, 96).cuda()
-        info_total = torch.cat((mem_past_i, mem_fut_i), 0)
-        state_dec = zero_padding
-        output = self.future_decoder(info_total, state_dec)
+        info_future = mem_fut_i.unsqueeze(1)
+        info_total = torch.cat((mem_past_i, mem_fut_i), 0).unsqueeze(1)
+        # print(info_total.size(), info_future.size())
+        # raise
+        output = self.future_decoder(info_future, info_total)
         output = output.permute(1, 0, 2)
         prediction_single = self.FC_output(output)
 
-        return prediction_single
+        return prediction_single.squeeze(0)
 
     def forward(self, past, future=None):
         """
@@ -134,6 +135,7 @@ class model_controllerMem(nn.Module):
             info_future = info_future.permute(1, 0, 2)
             info_total = info_total.permute(1, 0, 2)
             # print('info: ',info_future.size(),info_total.size())
+            # atorch.Size([40, 8, 512]) torch.Size([60, 8, 512])
             output = self.future_decoder(info_future, info_total)
             output = output.permute(1, 0, 2)
             # print('output ', output.size())
