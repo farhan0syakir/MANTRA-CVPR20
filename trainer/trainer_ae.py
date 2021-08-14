@@ -23,7 +23,7 @@ class Trainer:
         """
 
         # test folder creating
-        self.name_test = str(datetime.datetime.now())[:13]
+        self.name_test = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         self.folder_tensorboard = 'runs/runs-ae/'
         self.folder_test = 'training/training_ae/' + self.name_test + '_' + config.info
         if not os.path.exists(self.folder_test):
@@ -210,7 +210,11 @@ class Trainer:
             if self.config.cuda:
                 past = past.cuda()
                 future = future.cuda()
-            pred = self.mem_n2n(past, future).data
+
+            src_seq_len = past.shape[1] + future.shape[1]
+            src_att = torch.zeros((src_seq_len, src_seq_len)).type(torch.bool).cuda()
+            trg_att = self.generate_square_subsequent_mask(future.shape[1]).cuda()
+            pred = self.mem_n2n(past, future, src_att, trg_att).data
 
             distances = torch.norm(pred - future, dim=2)
             eucl_mean += torch.sum(torch.mean(distances, 1))
