@@ -67,7 +67,7 @@ class Trainer():
         self.settings = {
             "batch_size": config.batch_size,
             "use_cuda": config.cuda,
-            "dim_embedding_key": config.dim_embedding_key,
+            "d_model": config.d_model,
             "num_prediction": config.preds,
             "past_len": config.past_len,
             "future_len": config.future_len
@@ -98,7 +98,7 @@ class Trainer():
         self.writer.add_text('Training Configuration', 'dataset test: {}'.format(len(self.data_test)), 0)
         self.writer.add_text('Training Configuration', 'batch_size: {}'.format(self.config.batch_size), 0)
         self.writer.add_text('Training Configuration', 'learning rate init: {}'.format(self.config.learning_rate), 0)
-        self.writer.add_text('Training Configuration', 'dim_embedding_key: {}'.format(self.config.dim_embedding_key), 0)
+        self.writer.add_text('Training Configuration', 'd_model: {}'.format(self.config.d_model), 0)
 
     def write_details(self):
         """
@@ -111,7 +111,7 @@ class Trainer():
         self.file.write('test size: {}'.format(len(self.data_test)) + '\n')
         self.file.write('batch size: {}'.format(self.config.batch_size) + '\n')
         self.file.write('learning rate: {}'.format(self.config.learning_rate) + '\n')
-        self.file.write('embedding dim: {}'.format(self.config.dim_embedding_key) + '\n')
+        self.file.write('d_model: {}'.format(self.config.d_model) + '\n')
 
     def fit(self):
         """
@@ -149,7 +149,7 @@ class Trainer():
             print('Epoch took: {} Loss: {}'.format(end - start, loss))
             self.save_plot_controller(epoch)
 
-            if (epoch + 1) % 20 == 0:
+            if (epoch + 1) % 1 == 0:
                 # Test model while training
                 print('start test')
                 start_test = time.time()

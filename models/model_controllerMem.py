@@ -16,7 +16,7 @@ class model_controllerMem(nn.Module):
 
         # parameters
         self.use_cuda = settings["use_cuda"]
-        self.dim_embedding_key = settings["dim_embedding_key"]
+        self.d_model = settings["d_model"]
         self.num_prediction = settings["num_prediction"]
         self.past_len = settings["past_len"]
         self.future_len = settings["future_len"]
@@ -102,11 +102,9 @@ class model_controllerMem(nn.Module):
         """
 
         dim_batch = past.size()[0]
-        zero_padding = torch.zeros(1, dim_batch, self.dim_embedding_key * 2)
         prediction = torch.Tensor()
         present_temp = past[:, -1].unsqueeze(1)
         if self.use_cuda:
-            zero_padding = zero_padding.cuda()
             prediction = prediction.cuda()
 
         # past temporal encoding
@@ -182,19 +180,17 @@ class model_controllerMem(nn.Module):
             num_prediction = self.num_prediction
 
         dim_batch = past.size()[0]
-        zero_padding = torch.zeros(1, dim_batch, self.dim_embedding_key * 2).cuda()
         prediction = torch.Tensor().cuda()
-        present_temp = past[:, -1].unsqueeze(1)
 
         # past temporal encoding
         past = torch.transpose(past, 1, 2)
-        # story_embed = self.relu(self.conv_past(past))
-        # story_embed = torch.transpose(story_embed, 1, 2)
         state_past = self.encoder_past(past)
 
         # Cosine similarity and memory read
         past_normalized = F.normalize(self.memory_past, p=2, dim=1)
         state_normalized = F.normalize(state_past.squeeze(), p=2, dim=1)
+        past_normalized = torch.flatten(past_normalized, 1)
+        state_normalized = torch.flatten(state_normalized, 1)
         weight_read = torch.matmul(past_normalized, state_normalized.transpose(0, 1)).transpose(0, 1)
         index_max = torch.sort(weight_read, descending=True)[1].cpu()[:, :num_prediction]
 
