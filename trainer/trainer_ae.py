@@ -61,7 +61,7 @@ class Trainer:
             "use_cuda": config.cuda,
             "dim_feature_tracklet": config.past_len * 2,
             "dim_feature_future": config.future_len * 2,
-            "dim_embedding_key": config.dim_embedding_key,
+            "d_model": config.d_model,
             "past_len": config.past_len,
             "future_len": config.future_len,
         }
@@ -92,7 +92,7 @@ class Trainer:
         self.writer.add_text('Training Configuration', 'dataset test: {}'.format(len(self.data_test)), 0)
         self.writer.add_text('Training Configuration', 'batch_size: {}'.format(self.config.batch_size), 0)
         self.writer.add_text('Training Configuration', 'learning rate init: {}'.format(self.config.learning_rate), 0)
-        self.writer.add_text('Training Configuration', 'dim_embedding_key: {}'.format(self.config.dim_embedding_key), 0)
+        self.writer.add_text('Training Configuration', 'd_model: {}'.format(self.config.d_model), 0)
 
     def write_details(self):
         """
@@ -105,7 +105,7 @@ class Trainer:
         self.file.write('test size: {}'.format(len(self.data_test)) + '\n')
         self.file.write('batch size: {}'.format(self.config.batch_size) + '\n')
         self.file.write('learning rate: {}'.format(self.config.learning_rate) + '\n')
-        self.file.write('embedding dim: {}'.format(self.config.dim_embedding_key) + '\n')
+        self.file.write('embedding d_model: {}'.format(self.config.d_model) + '\n')
 
     def draw_track(self, past, future, pred=None, index_tracklet=0, num_epoch=0, train=False):
         """

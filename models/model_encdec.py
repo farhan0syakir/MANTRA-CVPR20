@@ -17,23 +17,22 @@ class model_encdec(nn.Module):
 
         self.name_model = 'autoencoder'
         self.use_cuda = settings["use_cuda"]
-        self.dim_embedding_key = settings["dim_embedding_key"]
         self.past_len = settings["past_len"]
         self.future_len = settings["future_len"]
+        self.d_model = settings["d_model"]
         channel_in = 2
 
 
         # encoder-decoder
-        self.d_model = d_model = 512
         dropout = 0.1
 
-        self.past_embed = nn.Sequential(LinearEmbedding(channel_in,d_model), PositionalEncoding(d_model, dropout))
-        self.future_embed = nn.Sequential(LinearEmbedding(channel_in,d_model), PositionalEncoding(d_model, dropout))
+        self.past_embed = nn.Sequential(LinearEmbedding(channel_in,self.d_model), PositionalEncoding(self.d_model, dropout))
+        self.future_embed = nn.Sequential(LinearEmbedding(channel_in,self.d_model), PositionalEncoding(self.d_model, dropout))
 
-        self.past_encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=d_model, nhead=8), num_layers=6)
-        self.future_encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=d_model, nhead=8), num_layers=6)
-        self.future_decoder = nn.TransformerDecoder(nn.TransformerDecoderLayer(d_model=d_model, nhead=8), num_layers=6)
-        self.FC_output = torch.nn.Linear(d_model, 2)
+        self.past_encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=self.d_model, nhead=8), num_layers=6)
+        self.future_encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=self.d_model, nhead=8), num_layers=6)
+        self.future_decoder = nn.TransformerDecoder(nn.TransformerDecoderLayer(d_model=self.d_model, nhead=8), num_layers=6)
+        self.FC_output = torch.nn.Linear(self.d_model, 2)
 
         # activation function
         self.relu = nn.ReLU()
