@@ -40,10 +40,6 @@ class model_controllerMem(nn.Module):
         self.future_decoder = model_pretrained.future_decoder
         self.FC_output = model_pretrained.FC_output
 
-        # activation functions
-        self.relu = nn.ReLU()
-        self.softmax = nn.Softmax()
-
         self.linear_controller = torch.nn.Linear(1, 1)
 
     def init_memory(self, data_train):
@@ -228,10 +224,8 @@ class model_controllerMem(nn.Module):
         writing_prob = torch.sigmoid(self.linear_controller(tolerance_rate))
 
         # future encoding
-        future = torch.transpose(future, 1, 2)
-        future_embed = self.relu(self.conv_fut(future))
-        future_embed = torch.transpose(future_embed, 1, 2)
-        output_fut, state_fut = self.encoder_fut(future_embed)
+        future_embed = self.future_embed(future)
+        state_fut = self.future_encoder(future_embed).unsqueeze(0)
 
         # index of elements to be added in memory
         index_writing = np.where(writing_prob.cpu() > 0.5)[0]
