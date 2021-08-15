@@ -194,8 +194,8 @@ class model_controllerMem(nn.Module):
 
         # Cosine similarity and memory read
         past_normalized = F.normalize(self.memory_past, p=2, dim=1)
-        # state_normalized = F.normalize(state_past.squeeze(), p=2, dim=1)
-        weight_read = torch.matmul(past_normalized).transpose(0, 1)
+        state_normalized = F.normalize(state_past.squeeze(), p=2, dim=1)
+        weight_read = torch.matmul(past_normalized, state_normalized.transpose(0, 1)).transpose(0, 1)
         index_max = torch.sort(weight_read, descending=True)[1].cpu()[:, :num_prediction]
 
         for i_track in range(num_prediction):

@@ -141,11 +141,9 @@ class model_memory_IRM(nn.Module):
         present = present_temp.repeat_interleave(self.num_prediction, dim=0)
         state_past = state_past.repeat_interleave(self.num_prediction, dim=1)
         ind = self.index_max.flatten()
-        # print(self..size())
-        # raise
 
         info_future = self.memory_fut[ind]
-        info_total = torch.cat((state_past, info_future), 1)
+        info_total = torch.cat((state_past, info_future.unsqueeze(0)), 1)
 
         info_future = info_future.permute(1, 0, 2)
         info_total = info_total.permute(1, 0, 2)
