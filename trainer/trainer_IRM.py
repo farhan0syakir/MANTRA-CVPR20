@@ -72,7 +72,7 @@ class Trainer:
         self.settings = {
             "batch_size": config.batch_size,
             "use_cuda": config.cuda,
-            "dim_embedding_key": config.dim_embedding_key,
+            "d_model": config.d_model,
             "num_prediction": self.num_prediction,
             "past_len": config.past_len,
             "future_len": config.future_len
@@ -106,7 +106,7 @@ class Trainer:
         self.writer.add_text('Training Configuration', 'number of prediction: ' + str(self.num_prediction), 0)
         self.writer.add_text('Training Configuration', 'batch_size: ' + str(self.config.batch_size), 0)
         self.writer.add_text('Training Configuration', 'learning rate init: ' + str(self.config.learning_rate), 0)
-        self.writer.add_text('Training Configuration', 'dim_embedding_key: ' + str(self.settings["dim_embedding_key"]),
+        self.writer.add_text('Training Configuration', 'd_model: ' + str(self.settings["d_model"]),
                              0)
 
     def write_details(self):
@@ -242,7 +242,7 @@ class Trainer:
         fig = plt.figure()
         plt.imshow(scene, cmap=cm)
         colors = pl.cm.Reds(np.linspace(1, 0.3, pred.shape[0]))
-        matRot_track = cv2.getRotationMatrix2D((0, 0), -angle, 1)
+        matRot_track = cv2.getRotationMatrix2D((0, 0), -angle.item(), 1)
         past = cv2.transform(past.cpu().numpy().reshape(-1, 1, 2), matRot_track).squeeze()
         future = cv2.transform(future.cpu().numpy().reshape(-1, 1, 2), matRot_track).squeeze()
         story_scene = past * 2 + self.dim_clip
@@ -366,13 +366,13 @@ class Trainer:
         :return: loss
         """
 
-        if saved_memory:
+        if eval(saved_memory):
             print('memories of pretrained model')
         else:
             self.mem_n2n.init_memory(self.data_train)
             config = self.config
             with torch.no_grad():
-                for step, (index, past, future, _, _, _, _, _, _, _) in enumerate(self.train_loader):
+                for step, (index, past, future, _, _, _, _, _, _, _) in enumerate(tqdm.tqdm(self.train_loader)):
                     self.iterations += 1
                     past = Variable(past)
                     future = Variable(future)

@@ -16,7 +16,7 @@ class model_memory_IRM(nn.Module):
 
         # parameters
         self.use_cuda = settings["use_cuda"]
-        self.dim_embedding_key = settings["dim_embedding_key"]
+        self.d_model = settings["d_model"]
         self.num_prediction = settings["num_prediction"]
         self.past_len = settings["past_len"]
         self.future_len = settings["future_len"]
@@ -53,10 +53,10 @@ class model_memory_IRM(nn.Module):
             nn.Conv2d(8, 16, kernel_size=5, stride=1, padding=2),
             nn.ReLU(), nn.BatchNorm2d(16))
 
-        self.RNN_scene = nn.GRU(16, self.dim_embedding_key, 1, batch_first=True)
+        self.RNN_scene = nn.GRU(16, self.d_model, self.past_len, batch_first=True)
 
         # refinement fc layer
-        self.fc_refine = nn.Linear(self.dim_embedding_key, self.future_len * 2)
+        self.fc_refine = nn.Linear(self.d_model * self.past_len, self.future_len * 2)
 
         self.reset_parameters()
 
@@ -96,7 +96,7 @@ class model_memory_IRM(nn.Module):
 
         # past encoding
         story_embed = self.past_embed(past)
-        state_past = self.past_encoder(story_embed)
+        state_past = self.past_encoder(story_embed).unsqueeze(0)
 
         # future encoding
         future_embed = self.future_embed(future)
@@ -120,13 +120,10 @@ class model_memory_IRM(nn.Module):
         :return: predicted future
         """
         dim_batch = past.size()[0]
-        zero_padding = torch.zeros(1, dim_batch * self.num_prediction, self.dim_embedding_key * 2).cuda()
-        prediction = torch.Tensor().cuda()
         present_temp = past[:, -1].unsqueeze(1)
-
         # past temporal encoding
         story_embed = self.past_embed(past)
-        state_past = self.past_encoder(story_embed).unsqueeze(0)
+        state_past = self.past_encoder(story_embed)
 
         # Cosine similarity and memory read
         past_normalized = F.normalize(self.memory_past, p=2, dim=1)
@@ -136,14 +133,14 @@ class model_memory_IRM(nn.Module):
         # print(past_normalized.size(), state_normalized.size())
         # [6, 20* 512], [32, 20* 512]
         self.weight_read = torch.matmul(past_normalized, state_normalized.transpose(0, 1)).transpose(0, 1)
-        self.index_max = torch.sort(self.weight_read, descending=True)[1].cpu()
+        self.index_max = torch.sort(self.weight_read, descending=True)[1].cpu()[:, :self.num_prediction]
 
         present = present_temp.repeat_interleave(self.num_prediction, dim=0)
-        state_past = state_past.repeat_interleave(self.num_prediction, dim=1)
+        state_past = state_past.repeat_interleave(self.num_prediction, dim=0)
         ind = self.index_max.flatten()
 
         info_future = self.memory_fut[ind]
-        info_total = torch.cat((state_past, info_future.unsqueeze(0)), 1)
+        info_total = torch.cat((state_past, info_future), 1)
 
         info_future = info_future.permute(1, 0, 2)
         info_total = info_total.permute(1, 0, 2)
@@ -152,11 +149,11 @@ class model_memory_IRM(nn.Module):
         output = self.future_decoder(info_future, info_total)
         output = output.permute(1, 0, 2)
         # print('output ', output.size())
-        prediction_single = self.FC_output(output)
+        prediction = self.FC_output(output)
         # print('ps ', prediction_single.size())
-        prediction = torch.cat((prediction, prediction_single.unsqueeze(1)), 1)
 
         if scene is not None:
+            state_past = state_past.permute(1,0,2).contiguous()
             # scene encoding
             scene = scene.permute(0, 3, 1, 2)
             scene_1 = self.convScene_1(scene)
@@ -175,6 +172,7 @@ class model_memory_IRM(nn.Module):
 
                 state_rnn = state_past
                 output_rnn, state_rnn = self.RNN_scene(output, state_rnn)
+                state_rnn = torch.flatten(state_rnn.permute(1,0,2),1)
                 prediction_refine = self.fc_refine(state_rnn).view(-1, self.future_len, 2)
                 prediction = prediction + prediction_refine
 
@@ -194,36 +192,29 @@ class model_memory_IRM(nn.Module):
             num_prediction = self.num_prediction
 
         dim_batch = past.size()[0]
-        zero_padding = torch.zeros(1, dim_batch * num_prediction, self.dim_embedding_key * 2).cuda()
-        prediction = torch.Tensor().cuda()
-        present_temp = past[:, -1].unsqueeze(1)
 
         # past temporal encoding
-        past = torch.transpose(past, 1, 2)
-        story_embed = self.relu(self.conv_past(past))
-        story_embed = torch.transpose(story_embed, 1, 2)
-        state_past = self.encoder_past(story_embed)
+        story_embed = self.past_embed(past)
+        state_past = self.past_encoder(story_embed)
 
         # Cosine similarity and memory read
         past_normalized = F.normalize(self.memory_past, p=2, dim=1)
         state_normalized = F.normalize(state_past.squeeze(), p=2, dim=1)
         past_normalized = torch.flatten(past_normalized, 1)
         state_normalized = torch.flatten(state_normalized, 1)
-        # print(past_normalized.size(), state_normalized.size())
-        # [6, 20* 512], [32, 20* 512]
         weight_read = torch.matmul(past_normalized, state_normalized.transpose(0, 1)).transpose(0, 1)
-        index_max = torch.sort(weight_read, descending=True)[1].cpu()
+        index_max = torch.sort(weight_read, descending=True)[1].cpu()[:, :num_prediction]
 
-        present = present_temp.repeat_interleave(num_prediction, dim=0)
-        state_past_repeat = state_past.repeat_interleave(num_prediction, dim=1)
-
+        state_past_repeat = state_past.repeat_interleave(num_prediction, dim=0)
         ind = index_max.flatten()
         info_future = self.memory_fut[ind]
-        info_total = torch.cat((state_past, info_future), 1)
+        info_total = torch.cat((state_past_repeat, info_future), 1)
+
+        info_future = info_future.permute(1, 0, 2)
+        info_total = info_total.permute(1, 0, 2)
         output = self.future_decoder(info_future, info_total)
         output = output.permute(1, 0, 2)
-        prediction_single = self.FC_output(output)
-        prediction = torch.cat((prediction, prediction_single.unsqueeze(1)), 1)
+        prediction = self.FC_output(output)
 
         # Iteratively refine predictions using context
         if scene is not None:
@@ -261,10 +252,9 @@ class model_memory_IRM(nn.Module):
         writing_prob = torch.sigmoid(self.linear_controller(tolerance_rate))
 
         # future encoding
-        future = torch.transpose(future, 1, 2)
-        future_embed = self.relu(self.conv_fut(future))
-        future_embed = torch.transpose(future_embed, 1, 2)
-        output_fut, state_fut = self.encoder_fut(future_embed)
+        future_embed = self.future_embed(future)
+        state_fut = self.future_encoder(future_embed).unsqueeze(0)
+
 
         # ablation study: all tracks in memory
         # index_writing = np.where(writing_prob.cpu() > 0)[0]

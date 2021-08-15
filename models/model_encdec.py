@@ -83,9 +83,8 @@ class model_encdec(nn.Module):
         tgt = tgt.permute(1, 0, 2)
 
 
-        # print(tgt.size(), memory.size())
-        # torch.Size([60, 32, 512]) torch.Size([40, 32, 512]) torch.Size([60, 60]) torch.Size([40, 40])
-        # raise
+        # print(tgt.size(), tmp.size())
+        # torch.Size([40, 32, 512]) torch.Size([60, 32, 512])
         output = self.future_decoder(tgt, tmp)
         output = output.permute(1, 0, 2)
         return self.FC_output(output)
