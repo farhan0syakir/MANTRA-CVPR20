@@ -149,7 +149,7 @@ class Trainer():
             print('Epoch took: {} Loss: {}'.format(end - start, loss))
             self.save_plot_controller(epoch)
 
-            if (epoch + 1) % 1 == 0:
+            if (epoch + 1) % 20 == 0:
                 # Test model while training
                 print('start test')
                 start_test = time.time()
