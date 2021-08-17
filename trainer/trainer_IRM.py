@@ -75,6 +75,7 @@ class Trainer:
             "d_model": config.d_model,
             "num_prediction": self.num_prediction,
             "past_len": config.past_len,
+            "use_irm": config.use_irm,
             "future_len": config.future_len
         }
         self.max_epochs = config.max_epochs
@@ -366,7 +367,7 @@ class Trainer:
         :return: loss
         """
 
-        if eval(saved_memory):
+        if saved_memory:
             print('memories of pretrained model')
         else:
             self.mem_n2n.init_memory(self.data_train)

@@ -20,6 +20,7 @@ class model_memory_IRM(nn.Module):
         self.num_prediction = settings["num_prediction"]
         self.past_len = settings["past_len"]
         self.future_len = settings["future_len"]
+        self.use_irm = settings["use_irm"]
 
         # similarity criterion
         self.weight_read = []
@@ -217,7 +218,7 @@ class model_memory_IRM(nn.Module):
         prediction = self.FC_output(output)
 
         # Iteratively refine predictions using context
-        if scene is not None:
+        if scene is not None and self.use_irm:
             # scene encoding
             scene = scene.permute(0, 3, 1, 2)
             scene_1 = self.convScene_1(scene)
