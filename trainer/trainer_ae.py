@@ -160,7 +160,7 @@ class Trainer:
             loss = self._train_single_epoch()
             print('Loss: {}'.format(loss))
 
-            if (epoch + 1) % 1 == 0:
+            if (epoch + 1) % 20 == 0:
                 print('test on train dataset')
                 dict_metrics_train = self.evaluate(self.train_loader, epoch + 1)
 
