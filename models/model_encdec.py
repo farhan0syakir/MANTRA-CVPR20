@@ -17,14 +17,14 @@ class model_encdec(nn.Module):
 
         self.name_model = 'autoencoder'
         self.use_cuda = settings["use_cuda"]
-        self.dim_embedding_key = settings["dim_embedding_key"]
+        self.d_model = settings["d_model"]
         self.past_len = settings["past_len"]
         self.future_len = settings["future_len"]
         channel_in = 2
 
 
         # encoder-decoder
-        self.d_model = d_model = 512
+        d_model = self.d_model
         dropout = 0.1
 
         self.past_embed = nn.Sequential(LinearEmbedding(channel_in,d_model), PositionalEncoding(d_model, dropout))
@@ -63,7 +63,7 @@ class model_encdec(nn.Module):
         nn.init.zeros_(self.FC_output.bias)
         raise
 
-    def forward(self, past, future):
+    def forward(self, past, future, src_mask = None, tgt_mask = None):
         """
         Forward pass that encodes past and future and decodes the future.
         :param past: past trajectory
@@ -71,14 +71,12 @@ class model_encdec(nn.Module):
         :return: decoded future
         """
         past_embeded = self.past_embed(past)
-        past_embeded = self.past_encoder(past_embeded)
+        past_embeded = self.past_encoder(past_embeded, src_mask)
 
         future_embeded = self.future_embed(future)
-        future_embeded = self.future_encoder(future_embeded)
+        future_embeded = self.future_encoder(future_embeded, src_mask)
 
         #print(past.size(),future.size()) #torch.Size([32, 20, 512]) torch.Size([32, 40, 512])
-        tmp = torch.cat((past_embeded, future_embeded), 1)
-        tmp = tmp.permute(1, 0, 2)
 
         tgt = future_embeded
         tgt = tgt.permute(1, 0, 2)
@@ -87,9 +85,19 @@ class model_encdec(nn.Module):
         # print(tgt.size(), memory.size())
         # torch.Size([60, 32, 512]) torch.Size([40, 32, 512]) torch.Size([60, 60]) torch.Size([40, 40])
         # raise
-        output = self.future_decoder(tgt, tmp)
+        output = self.future_decoder(tgt, past_embeded, tgt_mask)
         output = output.permute(1, 0, 2)
         return self.FC_output(output)
+
+    def encode(self, past):
+        return  self.past_encoder( self.past_embed(past) )
+
+    def decode(self, tgt, past_embeded):
+        future_embeded = self.future_embed(tgt)
+        future_embeded = self.future_encoder(future_embeded)
+        tgt = future_embeded
+        tgt = tgt.permute(1, 0, 2)
+        return  self.future_decoder(tgt, past_embeded)
 
 class PositionalEncoding(nn.Module):
     """

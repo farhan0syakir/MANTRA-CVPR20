@@ -14,6 +14,10 @@ import dataset_invariance
 from torch.autograd import Variable
 import tqdm
 
+def generate_square_subsequent_mask(sz):
+    mask = (torch.triu(torch.ones((sz, sz))) == 1).transpose(0, 1)
+    mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+    return mask
 
 class Trainer:
     def __init__(self, config):
@@ -61,7 +65,7 @@ class Trainer:
             "use_cuda": config.cuda,
             "dim_feature_tracklet": config.past_len * 2,
             "dim_feature_future": config.future_len * 2,
-            "dim_embedding_key": config.dim_embedding_key,
+            "d_model": config.d_model,
             "past_len": config.past_len,
             "future_len": config.future_len,
         }
@@ -92,7 +96,7 @@ class Trainer:
         self.writer.add_text('Training Configuration', 'dataset test: {}'.format(len(self.data_test)), 0)
         self.writer.add_text('Training Configuration', 'batch_size: {}'.format(self.config.batch_size), 0)
         self.writer.add_text('Training Configuration', 'learning rate init: {}'.format(self.config.learning_rate), 0)
-        self.writer.add_text('Training Configuration', 'dim_embedding_key: {}'.format(self.config.dim_embedding_key), 0)
+        self.writer.add_text('Training Configuration', 'd_model: {}'.format(self.config.d_model), 0)
 
     def write_details(self):
         """
@@ -105,7 +109,7 @@ class Trainer:
         self.file.write('test size: {}'.format(len(self.data_test)) + '\n')
         self.file.write('batch size: {}'.format(self.config.batch_size) + '\n')
         self.file.write('learning rate: {}'.format(self.config.learning_rate) + '\n')
-        self.file.write('embedding dim: {}'.format(self.config.dim_embedding_key) + '\n')
+        self.file.write('embedding dim: {}'.format(self.config.d_model) + '\n')
 
     def draw_track(self, past, future, pred=None, index_tracklet=0, num_epoch=0, train=False):
         """
@@ -161,18 +165,18 @@ class Trainer:
                 dict_metrics_train = self.evaluate(self.train_loader, epoch + 1)
 
                 print('test on TEST dataset')
-                dict_metrics_test = self.evaluate(self.test_loader, epoch + 1)
+                dict_metrics_test = self.greedy_evaluate(self.test_loader, epoch + 1)
 
                 # Tensorboard summary: learning rate
                 for param_group in self.opt.param_groups:
                     self.writer.add_scalar('learning_rate', param_group["lr"], epoch)
 
                 # Tensorboard summary: train
-                self.writer.add_scalar('accuracy_train/eucl_mean', dict_metrics_train['eucl_mean'], epoch)
-                self.writer.add_scalar('accuracy_train/Horizon10s', dict_metrics_train['horizon10s'], epoch)
-                self.writer.add_scalar('accuracy_train/Horizon20s', dict_metrics_train['horizon20s'], epoch)
-                self.writer.add_scalar('accuracy_train/Horizon30s', dict_metrics_train['horizon30s'], epoch)
-                self.writer.add_scalar('accuracy_train/Horizon40s', dict_metrics_train['horizon40s'], epoch)
+                # self.writer.add_scalar('accuracy_train/eucl_mean', dict_metrics_train['eucl_mean'], epoch)
+                # self.writer.add_scalar('accuracy_train/Horizon10s', dict_metrics_train['horizon10s'], epoch)
+                # self.writer.add_scalar('accuracy_train/Horizon20s', dict_metrics_train['horizon20s'], epoch)
+                # self.writer.add_scalar('accuracy_train/Horizon30s', dict_metrics_train['horizon30s'], epoch)
+                # self.writer.add_scalar('accuracy_train/Horizon40s', dict_metrics_train['horizon40s'], epoch)
 
                 # Tensorboard summary: test
                 self.writer.add_scalar('accuracy_test/eucl_mean', dict_metrics_test['eucl_mean'], epoch)
@@ -183,6 +187,7 @@ class Trainer:
 
                 # Save model checkpoint
                 torch.save(self.mem_n2n, self.folder_test + 'model_ae_epoch_' + str(epoch) + '_' + self.name_test)
+                self.save_results(dict_metrics_test, epoch=epoch + 1)
 
                 # Tensorboard summary: model weights
                 for name, param in self.mem_n2n.named_parameters():
@@ -221,20 +226,89 @@ class Trainer:
             horizon40s += torch.sum(distances[:, 39])
 
             # Draw sample: the first of the batch
-            if loader == self.test_loader:
-                self.draw_track(past[0],
-                                future[0],
-                                pred[0],
-                                index_tracklet=step,
-                                num_epoch=epoch,
-                                train=False
-                                )
+            # if loader == self.test_loader:
+            #     self.draw_track(past[0],
+            #                     future[0],
+            #                     preds[0],
+            #                     index_tracklet=step,
+            #                     num_epoch=epoch,
+            #                     train=False
+            #                     )
 
         dict_metrics['eucl_mean'] = eucl_mean / len(loader.dataset)
         dict_metrics['horizon10s'] = horizon10s / len(loader.dataset)
         dict_metrics['horizon20s'] = horizon20s / len(loader.dataset)
         dict_metrics['horizon30s'] = horizon30s / len(loader.dataset)
         dict_metrics['horizon40s'] = horizon40s / len(loader.dataset)
+
+        return dict_metrics
+
+    def greedy_evaluate(self, loader, epoch=0):
+        """
+        Evaluate the model.
+        :param loader: pytorch dataloader to loop over the data
+        :param epoch: current epoch (default 0)
+        :return: a dictionary with performance metrics
+        """
+
+        eucl_mean = ADE_1s = ADE_2s = ADE_3s = horizon10s = horizon20s = horizon30s = horizon40s = 0
+
+        dict_metrics = {}
+
+        # Loop over samples
+        for step, (index, past, future, presents, angle_presents, videos, vehicles, number_vec, scene, scene_one_hot) \
+                in enumerate(tqdm.tqdm(loader)):
+            past = Variable(past)
+            future = Variable(future)
+            if self.config.cuda:
+                past = past.cuda()
+                future = future.cuda()
+
+            start_of_seq = past[:, -1, :2].unsqueeze(1)
+            past_embeded = self.mem_n2n.encode(past).data
+            preds = start_of_seq
+
+            for i in range(self.config.future_len - 1):
+                # tgt_mask = generate_square_subsequent_mask(preds.shape[1])
+                # if self.config.cuda:
+                #     tgt_mask = tgt_mask.cuda()
+                # raise
+                output = self.mem_n2n.decode(preds, past_embeded).data
+                output = output.permute(1, 0, 2)
+                output = self.mem_n2n.FC_output(output).data
+                # print(output.size())
+                preds = torch.cat((preds, output[:, -1:, :]), 1)
+
+            distances = torch.norm(preds - future, dim=2)
+            eucl_mean += torch.sum(torch.mean(distances, 1))
+            ADE_1s += torch.sum(torch.mean(distances[:, :10], 1))
+            ADE_2s += torch.sum(torch.mean(distances[:, :20], 1))
+            ADE_3s += torch.sum(torch.mean(distances[:, :30], 1))
+            horizon10s += torch.sum(distances[:, 9])
+            horizon20s += torch.sum(distances[:, 19])
+            horizon30s += torch.sum(distances[:, 29])
+            horizon40s += torch.sum(distances[:, 39])
+
+            # Draw sample: the first of the batch
+            # if loader == self.test_loader:
+            #     self.draw_track(past[0],
+            #                     future[0],
+            #                     preds[0],
+            #                     index_tracklet=step,
+            #                     num_epoch=epoch,
+            #                     train=False
+            #                     )
+
+        dict_metrics['eucl_mean'] = eucl_mean / len(loader.dataset)
+        dict_metrics['horizon10s'] = horizon10s / len(loader.dataset)
+        dict_metrics['horizon20s'] = horizon20s / len(loader.dataset)
+        dict_metrics['horizon30s'] = horizon30s / len(loader.dataset)
+        dict_metrics['horizon40s'] = horizon40s / len(loader.dataset)
+
+        dict_metrics['eucl_mean'] = eucl_mean / len(loader.dataset)
+        dict_metrics['ADE_1s'] = ADE_1s / len(loader.dataset)
+        dict_metrics['ADE_2s'] = ADE_2s / len(loader.dataset)
+        dict_metrics['ADE_3s'] = ADE_3s / len(loader.dataset)
 
         return dict_metrics
 
@@ -272,3 +346,30 @@ class Trainer:
             self.writer.add_scalar('loss/loss_total', loss, self.iterations)
 
         return loss.item()
+
+    def save_results(self, dict_metrics_test, epoch=0):
+        """
+        Serialize results
+        :param dict_metrics_test: dictionary with test metrics
+        :param epoch: epoch index (default: 0)
+        :return: None
+        """
+        self.file = open(self.folder_test + "results.txt", "w")
+        self.file.write("TEST:" + '\n')
+        self.file.write("split test: " + str(self.data_test.ids_split_test) + '\n')
+        # self.file.write("num_predictions:" + str(self.config.preds) + '\n')
+        self.file.write("epoch: " + str(epoch) + '\n')
+        self.file.write("TRAIN size: " + str(len(self.data_train)) + '\n')
+        self.file.write("TEST size: " + str(len(self.data_test)) + '\n')
+        # self.file.write("memory size: " + str(len(self.mem_n2n.memory_past)) + '\n')
+
+        self.file.write("error 1s: " + str(dict_metrics_test['horizon10s'].item()) + '\n')
+        self.file.write("error 2s: " + str(dict_metrics_test['horizon20s'].item()) + '\n')
+        self.file.write("error 3s: " + str(dict_metrics_test['horizon30s'].item()) + '\n')
+        self.file.write("error 4s: " + str(dict_metrics_test['horizon40s'].item()) + '\n')
+        self.file.write("ADE 1s: " + str(dict_metrics_test['ADE_1s'].item()) + '\n')
+        self.file.write("ADE 2s: " + str(dict_metrics_test['ADE_2s'].item()) + '\n')
+        self.file.write("ADE 3s: " + str(dict_metrics_test['ADE_3s'].item()) + '\n')
+        self.file.write("ADE 4s: " + str(dict_metrics_test['eucl_mean'].item()) + '\n')
+
+        self.file.close()
