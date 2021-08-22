@@ -68,6 +68,7 @@ class Trainer:
             "d_model": config.d_model,
             "past_len": config.past_len,
             "future_len": config.future_len,
+            "num_prediction": config.num_prediction,
         }
         self.max_epochs = config.max_epochs
 
@@ -162,7 +163,7 @@ class Trainer:
 
             if (epoch + 1) % 20 == 0:
                 print('test on train dataset')
-                dict_metrics_train = self.evaluate(self.train_loader, epoch + 1)
+                # dict_metrics_train = self.evaluate(self.train_loader, epoch + 1)
 
                 print('test on TEST dataset')
                 dict_metrics_test = self.greedy_evaluate(self.test_loader, epoch + 1)
@@ -216,9 +217,14 @@ class Trainer:
                 past = past.cuda()
                 future = future.cuda()
 
-            pred = self.mem_n2n(past, future).data
+            output = self.mem_n2n(past, future).data
+            future_repeat = future.unsqueeze(1).repeat(1, self.config.num_prediction, 1, 1)
+            distances = torch.norm(output - future_repeat, dim=3)
+            distances_mean = torch.mean(distances, dim=2)
+            index_min = torch.argmin(distances_mean, dim=1)
+            best_pred = output[torch.arange(past.shape[0]), index_min[:]]
 
-            distances = torch.norm(pred - future, dim=2)
+            distances = torch.norm(best_pred - future, dim=2)
             eucl_mean += torch.sum(torch.mean(distances, 1))
             horizon10s += torch.sum(distances[:, 9])
             horizon20s += torch.sum(distances[:, 19])
@@ -258,15 +264,16 @@ class Trainer:
         # Loop over samples
         for step, (index, past, future, presents, angle_presents, videos, vehicles, number_vec, scene, scene_one_hot) \
                 in enumerate(tqdm.tqdm(loader)):
+            dim_batch = past.size(0)
             past = Variable(past)
             future = Variable(future)
             if self.config.cuda:
                 past = past.cuda()
                 future = future.cuda()
 
-            start_of_seq = past[:, -1, :2].unsqueeze(1)
+            present_temp = past[:, -1, :2].unsqueeze(1)
+            preds = present_temp.repeat_interleave(self.config.num_prediction, dim=2)
             past_embeded = self.mem_n2n.encode(past).data
-            preds = start_of_seq
 
             for i in range(self.config.future_len - 1):
                 # tgt_mask = generate_square_subsequent_mask(preds.shape[1])
@@ -276,10 +283,16 @@ class Trainer:
                 output = self.mem_n2n.decode(preds, past_embeded).data
                 output = output.permute(1, 0, 2)
                 output = self.mem_n2n.FC_output(output).data
-                # print(output.size())
                 preds = torch.cat((preds, output[:, -1:, :]), 1)
 
-            distances = torch.norm(preds - future, dim=2)
+            output = preds.view(dim_batch, self.config.num_prediction, self.config.future_len, 2)
+            future_repeat = future.unsqueeze(1).repeat(1, self.config.num_prediction, 1, 1)
+            distances = torch.norm(output - future_repeat, dim=3)
+            distances_mean = torch.mean(distances, dim=2)
+            index_min = torch.argmin(distances_mean, dim=1)
+            best_pred = output[torch.arange(past.shape[0]), index_min[:]]
+            distances = torch.norm(best_pred - future, dim=2)
+
             eucl_mean += torch.sum(torch.mean(distances, 1))
             ADE_1s += torch.sum(torch.mean(distances[:, :10], 1))
             ADE_2s += torch.sum(torch.mean(distances[:, :20], 1))
@@ -335,9 +348,14 @@ class Trainer:
 
             # Get prediction and compute loss
             src_seq_len = past.shape[1] + future.shape[1]
-            output = self.mem_n2n(past, future)
+            output = self.mem_n2n(past, future.repeat_interleave(self.config.num_prediction, dim=2))
             # output = self.mem_n2n(past, future)
-            loss = self.criterionLoss(output, future)
+            future_repeat = future.unsqueeze(1).repeat(1, self.config.num_prediction, 1, 1)
+            distances = torch.norm(output - future_repeat, dim=3)
+            distances_mean = torch.mean(distances, dim=2)
+            index_min = torch.argmin(distances_mean, dim=1)
+            best_pred = output[torch.arange(past.shape[0]), index_min[:]]
+            loss = self.criterionLoss(best_pred, future)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.mem_n2n.parameters(), 1.0, norm_type=2)
             self.opt.step()
@@ -354,7 +372,7 @@ class Trainer:
         :param epoch: epoch index (default: 0)
         :return: None
         """
-        self.file = open(self.folder_test + "results.txt", "w")
+        self.file = open(self.folder_test + "results_"+str(epoch)+".txt", "w")
         self.file.write("TEST:" + '\n')
         self.file.write("split test: " + str(self.data_test.ids_split_test) + '\n')
         # self.file.write("num_predictions:" + str(self.config.preds) + '\n')

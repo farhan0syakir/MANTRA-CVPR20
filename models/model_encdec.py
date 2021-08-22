@@ -20,6 +20,7 @@ class model_encdec(nn.Module):
         self.d_model = settings["d_model"]
         self.past_len = settings["past_len"]
         self.future_len = settings["future_len"]
+        self.num_prediction = settings["num_prediction"]
         channel_in = 2
 
 
@@ -28,12 +29,11 @@ class model_encdec(nn.Module):
         dropout = 0.1
 
         self.past_embed = nn.Sequential(LinearEmbedding(channel_in,d_model), PositionalEncoding(d_model, dropout))
-        self.future_embed = nn.Sequential(LinearEmbedding(channel_in,d_model), PositionalEncoding(d_model, dropout))
+        self.future_embed = nn.Sequential(LinearEmbedding(channel_in * self.num_prediction, d_model), PositionalEncoding(d_model, dropout))
 
         self.past_encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=d_model, nhead=8), num_layers=6)
-        self.future_encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=d_model, nhead=8), num_layers=6)
         self.future_decoder = nn.TransformerDecoder(nn.TransformerDecoderLayer(d_model=d_model, nhead=8), num_layers=6)
-        self.FC_output = torch.nn.Linear(d_model, 2)
+        self.FC_output = torch.nn.Linear(d_model, 2 * self.num_prediction)
 
         # activation function
         self.relu = nn.ReLU()
@@ -70,11 +70,12 @@ class model_encdec(nn.Module):
         :param future: future trajectory
         :return: decoded future
         """
+        dim_batch = past.size(0)
         past_embeded = self.past_embed(past)
         past_embeded = self.past_encoder(past_embeded, src_mask)
 
         future_embeded = self.future_embed(future)
-        future_embeded = self.future_encoder(future_embeded, src_mask)
+        # future_embeded = self.future_encoder(future_embeded, src_mask)
 
         #print(past.size(),future.size()) #torch.Size([32, 20, 512]) torch.Size([32, 40, 512])
 
@@ -87,14 +88,15 @@ class model_encdec(nn.Module):
         # raise
         output = self.future_decoder(tgt, past_embeded, tgt_mask)
         output = output.permute(1, 0, 2)
-        return self.FC_output(output)
+        prediction = self.FC_output(output)
+        prediction = prediction.view(dim_batch, self.num_prediction, self.future_len, 2)
+        return prediction
 
     def encode(self, past):
         return  self.past_encoder( self.past_embed(past) )
 
     def decode(self, tgt, past_embeded):
         future_embeded = self.future_embed(tgt)
-        future_embeded = self.future_encoder(future_embeded)
         tgt = future_embeded
         tgt = tgt.permute(1, 0, 2)
         return  self.future_decoder(tgt, past_embeded)
