@@ -275,7 +275,7 @@ class Trainer:
             preds = present_temp.repeat_interleave(self.config.num_prediction, dim=2)
             past_embeded = self.mem_n2n.encode(past).data
 
-            for i in range(self.config.future_len - 1):
+            for i in range(self.config.future_len):
                 # tgt_mask = generate_square_subsequent_mask(preds.shape[1])
                 # if self.config.cuda:
                 #     tgt_mask = tgt_mask.cuda()
@@ -285,7 +285,9 @@ class Trainer:
                 output = self.mem_n2n.FC_output(output).data
                 preds = torch.cat((preds, output[:, -1:, :]), 1)
 
-            output = preds.view(dim_batch, self.config.num_prediction, self.config.future_len, 2)
+            #shift left pred
+            output = preds.view(dim_batch, self.config.num_prediction, self.config.future_len + 1, 2)
+            output = output[:, :, 1:, :]
             future_repeat = future.unsqueeze(1).repeat(1, self.config.num_prediction, 1, 1)
             distances = torch.norm(output - future_repeat, dim=3)
             distances_mean = torch.mean(distances, dim=2)
@@ -345,10 +347,16 @@ class Trainer:
                 past = past.cuda()
                 future = future.cuda()
             self.opt.zero_grad()
-
+            present_temp = past[:, -1, :2].unsqueeze(1)
+            preds = present_temp.repeat_interleave(self.config.num_prediction, dim=2)
             # Get prediction and compute loss
             src_seq_len = past.shape[1] + future.shape[1]
-            output = self.mem_n2n(past, future.repeat_interleave(self.config.num_prediction, dim=2))
+            future_repeat_interleave = future.repeat_interleave(self.config.num_prediction, dim=2)
+            shifted_future = torch.cat((preds, future_repeat_interleave), 1)
+            output = self.mem_n2n(past, shifted_future)
+            #shift left
+            output = output[:,:,1:,:]
+
             # output = self.mem_n2n(past, future)
             future_repeat = future.unsqueeze(1).repeat(1, self.config.num_prediction, 1, 1)
             distances = torch.norm(output - future_repeat, dim=3)

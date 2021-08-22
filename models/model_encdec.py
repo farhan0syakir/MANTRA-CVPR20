@@ -89,7 +89,7 @@ class model_encdec(nn.Module):
         output = self.future_decoder(tgt, past_embeded, tgt_mask)
         output = output.permute(1, 0, 2)
         prediction = self.FC_output(output)
-        prediction = prediction.view(dim_batch, self.num_prediction, self.future_len, 2)
+        prediction = prediction.view(dim_batch, self.num_prediction, self.future_len + 1, 2)
         return prediction
 
     def encode(self, past):
