@@ -30,7 +30,8 @@ class model_encdec(nn.Module):
         # encoder-decoder
         self.encoder_past = nn.GRU(input_gru, self.dim_embedding_key, 1, batch_first=True)
         self.encoder_fut = nn.GRU(input_gru, self.dim_embedding_key, 1, batch_first=True)
-        self.decoder = nn.GRU(self.dim_embedding_key * 2, self.dim_embedding_key * 2, 1, batch_first=False)
+        self.multihead_attn = nn.MultiheadAttention(self.dim_embedding_key * 2, 8)
+        self.decoder = nn.GRU(self.dim_embedding_key * 2, self.dim_embedding_key * 2, 1)
         self.FC_output = torch.nn.Linear(self.dim_embedding_key * 2, 2)
 
         # activation function
@@ -92,6 +93,7 @@ class model_encdec(nn.Module):
 
         # state concatenation and decoding
         state_conc = torch.cat((state_past, state_fut), 2)
+        state_conc, _ = self.multihead_attn(state_conc,state_conc,state_conc)
         input_fut = state_conc
         state_fut = zero_padding
         for i in range(self.future_len):
