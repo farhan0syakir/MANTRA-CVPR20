@@ -58,8 +58,8 @@ class model_memory_IRM(nn.Module):
 
         # refinement fc layer
         self.fc_refine = nn.Linear(self.dim_embedding_key, self.future_len * 2)
-
-        self.multihead_attn = nn.MultiheadAttention(self.future_len * self.num_prediction, 8)
+        self.multihead_attn = nn.TransformerEncoderLayer(d_model=16, nhead=8)
+        # self.multihead_attn = nn.MultiheadAttention(self.future_len * self.num_prediction, 8)
 
         self.reset_parameters()
 
@@ -152,7 +152,7 @@ class model_memory_IRM(nn.Module):
         input_dec = info_total
         state_dec = zero_padding
         for i in range(self.future_len):
-            output_decoder, state_dec = self.x(input_dec, state_dec)
+            output_decoder, state_dec = self.decoder(input_dec, state_dec)
             displacement_next = self.FC_output(output_decoder)
             coords_next = present + displacement_next.squeeze(0).unsqueeze(1)
             prediction = torch.cat((prediction, coords_next), 1)
@@ -170,8 +170,6 @@ class model_memory_IRM(nn.Module):
             # prediction = prediction.transpose(0,2)
             # attn, _ = self.multihead_attn(prediction_t, prediction_t, prediction_t)
             # attn = F.normalize(attn)
-            print(prediction.size())
-            raise
 
             #normalize residual tensor
             # Iteratively refine predictions using context
@@ -183,6 +181,11 @@ class model_memory_IRM(nn.Module):
                 indices = 2 * (indices / 180) - 1
                 output = F.grid_sample(scene_2, indices, mode='nearest')
                 output = output.squeeze(2).permute(0, 2, 1)
+                output = output.transpose(0,1)
+
+                output = self.multihead_attn(output)
+                output = output.transpose(0,1)
+
 
                 state_rnn = state_past
                 output_rnn, state_rnn = self.RNN_scene(output, state_rnn)
