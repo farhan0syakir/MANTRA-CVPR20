@@ -181,7 +181,7 @@ class model_memory_IRM(nn.Module):
                 indices = pred_map.permute(0, 2, 1, 3)
                 # rescale between -1 and 1
                 indices = 2 * (indices / 180) - 1
-                output = F.grid_sample(scene_2, indices, mode='nearest')
+                output = F.grid_sample(scene_2, indices, mode='nearest', align_corners=False )
                 output = output.squeeze(2).permute(0, 2, 1)
                 output = output.transpose(0,1)
 
@@ -254,7 +254,7 @@ class model_memory_IRM(nn.Module):
                 indices = pred_map.permute(0, 2, 1, 3)
                 # rescale between -1 and 1
                 indices = 2 * (indices / 180) - 1
-                output = F.grid_sample(scene_2, indices, mode='nearest')
+                output = F.grid_sample(scene_2, indices, mode='nearest', align_corners=False )
                 output = output.squeeze(2).permute(0, 2, 1)
 
                 state_rnn = state_past_repeat
