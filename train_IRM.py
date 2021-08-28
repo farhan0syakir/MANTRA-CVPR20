@@ -13,6 +13,7 @@ def parse_config():
     parser.add_argument("--future_len", type=int, default=40)
     parser.add_argument("--preds", type=int, default=5)
     parser.add_argument("--dim_embedding_key", type=int, default=48)
+    parser.add_argument("--attention_layers", type=int, default=1)
 
     # MODEL CONTROLLER
     parser.add_argument("--model", default='pretrained_models/model_controller/model_controller')

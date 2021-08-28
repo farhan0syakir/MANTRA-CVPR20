@@ -20,6 +20,7 @@ class model_memory_IRM(nn.Module):
         self.num_prediction = settings["num_prediction"]
         self.past_len = settings["past_len"]
         self.future_len = settings["future_len"]
+        attention_layers = settings["attention_layers"]
 
         # similarity criterion
         self.weight_read = []
@@ -58,7 +59,8 @@ class model_memory_IRM(nn.Module):
 
         # refinement fc layer
         self.fc_refine = nn.Linear(self.dim_embedding_key, self.future_len * 2)
-        self.multihead_attn = nn.TransformerEncoderLayer(d_model=16, nhead=8)
+        multihead_attn_layer = nn.TransformerEncoderLayer(d_model=16, nhead=8)
+        self.multihead_attn = nn.TransformerEncoder(multihead_attn_layer, num_layers=attention_layers)
         # self.multihead_attn = nn.MultiheadAttention(self.future_len * self.num_prediction, 8)
 
         self.reset_parameters()
