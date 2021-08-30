@@ -137,10 +137,10 @@ class Trainer:
             param.requires_grad = False
         for param in self.mem_n2n.linear_controller.parameters():
             param.requires_grad = False
-        for param in self.mem_n2n.decoder.parameters():
-            param.requires_grad = False
-        for param in self.mem_n2n.FC_output.parameters():
-            param.requires_grad = False
+        for param in self.mem_n2n.decoder2.parameters():
+            param.requires_grad = True
+        for param in self.mem_n2n.FC_output2.parameters():
+            param.requires_grad = True
         for param in self.mem_n2n.convScene_1.parameters():
             param.requires_grad = True
         for param in self.mem_n2n.convScene_2.parameters():

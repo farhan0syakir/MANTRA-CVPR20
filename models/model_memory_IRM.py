@@ -37,8 +37,13 @@ class model_memory_IRM(nn.Module):
 
         self.encoder_past = model_pretrained.encoder_past
         self.encoder_fut = model_pretrained.encoder_fut
-        self.decoder = model_pretrained.decoder
-        self.FC_output = model_pretrained.FC_output
+
+        multihead_attn_layer = nn.TransformerEncoderLayer(d_model=16, nhead=8)
+        self.multihead_attn = nn.TransformerEncoder(multihead_attn_layer, num_layers=4)
+
+        self.decoder2 = nn.GRU(self.num_prediction * self.dim_embedding_key * 2, self.num_prediction * self.dim_embedding_key * 2, 1, batch_first=False)
+        self.FC_output2 = torch.nn.Linear(self.num_prediction * self.dim_embedding_key * 2, self.num_prediction * 2)
+
         self.relu = nn.ReLU()
         self.softmax = nn.Softmax()
 
@@ -125,7 +130,7 @@ class model_memory_IRM(nn.Module):
         :return: predicted future
         """
         dim_batch = past.size()[0]
-        zero_padding = torch.zeros(1, dim_batch * self.num_prediction, self.dim_embedding_key * 2).cuda()
+        zero_padding = torch.zeros(1, dim_batch, self.dim_embedding_key * 2 * self.num_prediction).cuda()
         prediction = torch.Tensor().cuda()
         present_temp = past[:, -1].unsqueeze(1)
 
@@ -141,21 +146,28 @@ class model_memory_IRM(nn.Module):
         self.weight_read = torch.matmul(past_normalized, state_normalized.transpose(0, 1)).transpose(0, 1)
         self.index_max = torch.sort(self.weight_read, descending=True)[1].cpu()[:, :self.num_prediction]
 
-        present = present_temp.repeat_interleave(self.num_prediction, dim=0)
-        state_past = state_past.repeat_interleave(self.num_prediction, dim=1)
-        ind = self.index_max.flatten()
-
-        info_future = self.memory_fut[ind]
-        info_total = torch.cat((state_past, info_future.unsqueeze(0)), 2)
-        input_dec = info_total
+        present = present_temp.repeat_interleave(self.num_prediction, dim=1)
+        state_past = state_past.repeat_interleave(self.num_prediction, dim=0)
+        state_past = state_past.transpose(0, 1)
+        # for i_track in range(self.num_prediction):
+        info_future = self.memory_fut[self.index_max]
+        info_total = torch.cat((state_past, info_future), 2)
+        info_total = info_total.flatten(1)
+        input_dec = info_total.unsqueeze(0)
+        present = present.unsqueeze(2)
         state_dec = zero_padding
+        # print(present.size(), input_dec.size(), state_dec.size())
+        #torch.Size([160, 1, 2]) torch.Size([1, 32, 480]) torch.Size([1, 32, 480])
         for i in range(self.future_len):
-            output_decoder, state_dec = self.decoder(input_dec, state_dec)
-            displacement_next = self.FC_output(output_decoder)
-            coords_next = present + displacement_next.squeeze(0).unsqueeze(1)
-            prediction = torch.cat((prediction, coords_next), 1)
+            output_decoder, state_dec = self.decoder2(input_dec, state_dec)
+            displacement_next = self.FC_output2(output_decoder)
+            displacement_next = displacement_next.view(dim_batch, self.num_prediction, 1, 2)
+            coords_next = present + displacement_next
+            prediction = torch.cat((prediction, coords_next), 2)
             present = coords_next
             input_dec = zero_padding
+        prediction = prediction.view(-1, self.future_len, 2)
+        state_past = state_past.reshape(1, -1, self.dim_embedding_key)
 
         if scene is not None:
             # scene encoding
