@@ -20,6 +20,8 @@ class model_memory_IRM(nn.Module):
         self.num_prediction = settings["num_prediction"]
         self.past_len = settings["past_len"]
         self.future_len = settings["future_len"]
+        self.att_dec_layer = settings["att_dec_layer"]
+        self.att_dec_head = settings["att_dec_head"]
 
         # similarity criterion
         self.weight_read = []
@@ -38,8 +40,8 @@ class model_memory_IRM(nn.Module):
         self.encoder_past = model_pretrained.encoder_past
         self.encoder_fut = model_pretrained.encoder_fut
 
-        multihead_attn_layer = nn.TransformerEncoderLayer(d_model=16, nhead=8)
-        self.multihead_attn = nn.TransformerEncoder(multihead_attn_layer, num_layers=4)
+        multihead_attn_layer = nn.TransformerEncoderLayer(d_model=16, nhead=self.att_dec_head)
+        self.multihead_attn = nn.TransformerEncoder(multihead_attn_layer, num_layers=self.att_dec_layer)
 
         self.decoder2 = nn.GRU(self.num_prediction * self.dim_embedding_key * 2, self.num_prediction * self.dim_embedding_key * 2, 1, batch_first=False)
         self.FC_output2 = torch.nn.Linear(self.num_prediction * self.dim_embedding_key * 2, self.num_prediction * 2)
