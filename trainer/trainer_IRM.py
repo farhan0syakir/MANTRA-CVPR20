@@ -76,7 +76,8 @@ class Trainer:
             "num_prediction": self.num_prediction,
             "past_len": config.past_len,
             "future_len": config.future_len,
-            "attention_layers": config.attention_layers
+            "att_irm_layer": config.att_irm_layer,
+            "att_irm_head": config.att_irm_head
         }
         self.max_epochs = config.max_epochs
 
@@ -109,7 +110,8 @@ class Trainer:
         self.writer.add_text('Training Configuration', 'learning rate init: ' + str(self.config.learning_rate), 0)
         self.writer.add_text('Training Configuration', 'dim_embedding_key: ' + str(self.settings["dim_embedding_key"]),
                              0)
-        self.writer.add_text('Training Configuration', 'attention_layers: ' + str(self.config.attention_layers), 0)
+        self.writer.add_text('Training Configuration', 'att_irm_layer: ' + str(self.config.att_irm_layer), 0)
+        self.writer.add_text('Training Configuration', 'att_irm_head: ' + str(self.config.att_irm_head), 0)
 
 
     def write_details(self):
