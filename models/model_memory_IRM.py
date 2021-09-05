@@ -22,6 +22,8 @@ class model_memory_IRM(nn.Module):
         self.future_len = settings["future_len"]
         self.att_dec_layer = settings["att_dec_layer"]
         self.att_dec_head = settings["att_dec_head"]
+        irm_att_layer = settings["att_irm_layer"]
+        irm_att_head = settings["att_irm_head"]
 
         # similarity criterion
         self.weight_read = []
@@ -62,6 +64,8 @@ class model_memory_IRM(nn.Module):
             nn.ReLU(), nn.BatchNorm2d(16))
 
         self.RNN_scene = nn.GRU(16, self.dim_embedding_key, 1, batch_first=True)
+        multihead_irm_layer = nn.TransformerEncoderLayer(d_model=16, nhead=irm_att_head)
+        self.multihead_irm = nn.TransformerEncoder(multihead_irm_layer, num_layers=irm_att_layer)
 
         # refinement fc layer
         self.fc_refine = nn.Linear(self.dim_embedding_key, self.future_len * 2)
@@ -187,6 +191,9 @@ class model_memory_IRM(nn.Module):
                 indices = 2 * (indices / 180) - 1
                 output = F.grid_sample(scene_2, indices, mode='nearest')
                 output = output.squeeze(2).permute(0, 2, 1)
+                output = output.transpose(0, 1)
+                output = self.multihead_irm(output)
+                output = output.transpose(0, 1)
 
                 state_rnn = state_past
                 output_rnn, state_rnn = self.RNN_scene(output, state_rnn)

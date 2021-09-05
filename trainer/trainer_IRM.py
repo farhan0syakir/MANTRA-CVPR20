@@ -77,6 +77,8 @@ class Trainer:
             "past_len": config.past_len,
             "att_dec_head": config.att_dec_head,
             "att_dec_layer": config.att_dec_layer,
+            "att_irm_head": config.att_irm_head,
+            "att_irm_layer": config.att_irm_layer,
             "future_len": config.future_len
         }
         self.max_epochs = config.max_epochs
@@ -120,6 +122,10 @@ class Trainer:
         self.file.write("train size: " + str(len(self.data_train)) + '\n')
         self.file.write("test size: " + str(len(self.data_test)) + '\n')
         self.file.write("batch size: " + str(self.config.batch_size) + '\n')
+        self.file.write("att_dec_head size: " + str(self.config.att_dec_head) + '\n')
+        self.file.write("att_dec_layer size: " + str(self.config.att_dec_layer) + '\n')
+        self.file.write("att_irm_head size: " + str(self.config.att_irm_head) + '\n')
+        self.file.write("att_irm_layer size: " + str(self.config.att_irm_layer) + '\n')
 
     def fit(self):
         """
