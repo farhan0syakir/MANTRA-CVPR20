@@ -189,7 +189,7 @@ class model_memory_IRM(nn.Module):
                 indices = pred_map.permute(0, 2, 1, 3)
                 # rescale between -1 and 1
                 indices = 2 * (indices / 180) - 1
-                output = F.grid_sample(scene_2, indices, mode='nearest')
+                output = F.grid_sample(scene_2, indices, mode='nearest', align_corners=True)
                 output = output.squeeze(2).permute(0, 2, 1)
                 output = output.transpose(0, 1)
                 output = self.multihead_irm(output)
@@ -214,6 +214,8 @@ class model_memory_IRM(nn.Module):
             num_prediction = self.memory_past.shape[0]
         else:
             num_prediction = self.num_prediction
+
+        raise
 
         dim_batch = past.size()[0]
         zero_padding = torch.zeros(1, dim_batch * num_prediction, self.dim_embedding_key * 2).cuda()
