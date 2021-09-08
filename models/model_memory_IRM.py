@@ -40,7 +40,7 @@ class model_memory_IRM(nn.Module):
         self.encoder_past = model_pretrained.encoder_past
         self.encoder_fut = model_pretrained.encoder_fut
 
-        multihead_attn_layer = nn.TransformerEncoderLayer(d_model=16, nhead=self.att_dec_head)
+        multihead_attn_layer = nn.TransformerEncoderLayer(d_model=self.num_prediction * self.dim_embedding_key * 2, nhead=self.att_dec_head)
         self.multihead_attn = nn.TransformerEncoder(multihead_attn_layer, num_layers=self.att_dec_layer)
 
         self.decoder2 = nn.GRU(self.num_prediction * self.dim_embedding_key * 2, self.num_prediction * self.dim_embedding_key * 2, 1, batch_first=False)
@@ -160,6 +160,7 @@ class model_memory_IRM(nn.Module):
         state_dec = zero_padding
         # print(present.size(), input_dec.size(), state_dec.size())
         #torch.Size([160, 1, 2]) torch.Size([1, 32, 480]) torch.Size([1, 32, 480])
+        state_dec = self.multihead_attn(state_dec)
         for i in range(self.future_len):
             output_decoder, state_dec = self.decoder2(input_dec, state_dec)
             displacement_next = self.FC_output2(output_decoder)
