@@ -162,6 +162,7 @@ class model_memory_IRM(nn.Module):
         input_dec = info_total.unsqueeze(0)
         present = present.unsqueeze(2)
         state_dec = zero_padding
+        state_dec = self.multihead_attn(state_dec)
         # print(present.size(), input_dec.size(), state_dec.size())
         #torch.Size([160, 1, 2]) torch.Size([1, 32, 480]) torch.Size([1, 32, 480])
         for i in range(self.future_len):
